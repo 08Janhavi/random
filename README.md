@@ -63,10 +63,10 @@ public class DirectoryMonitorServiceTest {
         Thread.sleep(500);
 
         // Simulate a file creation event
-        watchService.take();  // This should trigger the processing
+        latch.await(1, java.util.concurrent.TimeUnit.SECONDS);
 
-        // Wait for the latch to count down
-        latch.await();
+        // Stop the directory monitoring
+        directoryMonitorService.stopWatching();
 
         // Interrupt the monitor thread to stop the infinite loop
         monitorThread.interrupt();
