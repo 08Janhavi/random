@@ -6,6 +6,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.nio.file.*;
 import java.util.Collections;
+import java.util.concurrent.CountDownLatch;
 
 import static org.mockito.Mockito.*;
 
@@ -45,15 +46,24 @@ public class DirectoryMonitorServiceTest {
 
         doNothing().when(fileProcessingService).processFile(any(Path.class));
 
+        CountDownLatch latch = new CountDownLatch(1);
+
         // Act
-        Thread monitorThread = new Thread(() -> directoryMonitorService.watchDirectory());
+        Thread monitorThread = new Thread(() -> {
+            directoryMonitorService.watchDirectory();
+            latch.countDown();
+        });
         monitorThread.start();
 
-        // Simulate a file creation event
-        watchService.take();  // This should trigger the processing
-        Thread.sleep(1000);
+        // Give the monitor thread a moment to start
+        Thread.sleep(500);
 
+        // Simulate a file creation event
+        latch.await(1, java.util.concurrent.TimeUnit.SECONDS);
+
+        // Interrupt the monitor thread to stop the infinite loop
         monitorThread.interrupt();
+        monitorThread.join();
 
         // Assert
         verify(fileProcessingService, times(1)).processFile(testDirectory.resolve(mockPath));
