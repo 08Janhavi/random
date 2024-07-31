@@ -19,52 +19,65 @@ public class FileProcessingService {
     @Autowired
     private TransactionRepository transactionRepository;
     private static final java.util.logging.Logger logger = java.util.logging.Logger.getLogger(FileProcessingService.class.getName());
-    long duration;
+
     public void processFile(Path filePath){
         try(BufferedReader reader= new BufferedReader(new FileReader(String.valueOf(filePath)))){
             String line;
-            System.out.println(reader.readLine());
+            // Read and discard the header line if present
+            reader.readLine();
+
             while((line=reader.readLine())!=null){
-                String[] fields=line.split("\\|");
-                Transaction transaction=new Transaction();
-                transaction.setRic(fields[0]);
-                transaction.setQdb_ric(fields[1]);
-                transaction.setSeqno(fields[2]);
-                transaction.setExDate(fields[3]);
-                transaction.setPayDate(fields[4]);
-                transaction.setType(fields[5]);
-                transaction.setTypeCode(fields[6]);
-                transaction.setAmount(fields[7]);
-                transaction.setCcy(fields[8]);
-                transaction.setCcy(fields[9]);
-                transaction.setBl_Event(fields[10]);
-                transaction.setDeclareDate(fields[11]);
-                transaction.setRecordDate(fields[12]);
-                transaction.setFiscalYeDate(fields[13]);
-                transaction.setSource(fields[14]);
-                transaction.setQdb_Type_Code(fields[15]);
-                transaction.setPdpId(fields[16]);
-                transaction.setTakara_Amnt(fields[17]);
-                transaction.setTakara_CpNetAmnt(fields[18]);
-                transaction.setGlobalPrimaryEsmp(fields[19]);
-                transaction.setRegionalPrimaryEsmp(fields[20]);
-                transaction.setCountryCode(fields[21]);
-                transaction.setIsAusSplit(fields[22]);
-                transaction.setNxs_Ccy(fields[23]);
-                transaction.setNxs_DvdId(fields[24]);
-                transaction.setNxs_DivType(fields[25]);
-                transaction.setTakaraUpdated(fields[26]);
-                transaction.setGlobalPrimary(fields[27]);
-                transaction.setEquityRegionalPrimaryListing(fields[28]);
-                transaction.setListingType(fields[29]);
+                String[] fields = line.split("\\|");
+
+                // Validate the number of fields
+                if(fields.length != 30) {
+                    logger.warning("Unexpected number of fields in line: " + line);
+                    continue; // Skip this line
+                }
+
+                Transaction transaction = new Transaction();
+                transaction.setRic(validateField(fields[0]));
+                transaction.setQdb_ric(validateField(fields[1]));
+                transaction.setSeqno(validateField(fields[2]));
+                transaction.setExDate(validateField(fields[3]));
+                transaction.setPayDate(validateField(fields[4]));
+                transaction.setType(validateField(fields[5]));
+                transaction.setTypeCode(validateField(fields[6]));
+                transaction.setAmount(validateField(fields[7]));
+                transaction.setCcy(validateField(fields[8]));
+                transaction.setBl_Event(validateField(fields[10]));
+                transaction.setDeclareDate(validateField(fields[11]));
+                transaction.setRecordDate(validateField(fields[12]));
+                transaction.setFiscalYeDate(validateField(fields[13]));
+                transaction.setSource(validateField(fields[14]));
+                transaction.setQdb_Type_Code(validateField(fields[15]));
+                transaction.setPdpId(validateField(fields[16]));
+                transaction.setTakara_Amnt(validateField(fields[17]));
+                transaction.setTakara_CpNetAmnt(validateField(fields[18]));
+                transaction.setGlobalPrimaryEsmp(validateField(fields[19]));
+                transaction.setRegionalPrimaryEsmp(validateField(fields[20]));
+                transaction.setCountryCode(validateField(fields[21]));
+                transaction.setIsAusSplit(validateField(fields[22]));
+                transaction.setNxs_Ccy(validateField(fields[23]));
+                transaction.setNxs_DvdId(validateField(fields[24]));
+                transaction.setNxs_DivType(validateField(fields[25]));
+                transaction.setTakaraUpdated(validateField(fields[26]));
+                transaction.setGlobalPrimary(validateField(fields[27]));
+                transaction.setEquityRegionalPrimaryListing(validateField(fields[28]));
+                transaction.setListingType(validateField(fields[29]));
+
                 transactionRepository.save(transaction);
             }
         } catch (IOException e){
-            logger.info("hiiii reached in catch");
+            logger.severe("Error reading file: " + e.getMessage());
             e.printStackTrace();
         } finally {
             moveFileToProcessed(filePath);
         }
+    }
+
+    private String validateField(String field) {
+        return (field == null || field.trim().isEmpty()) ? "N/A" : field;
     }
 
     private void moveFileToProcessed(Path filePath) {
@@ -73,6 +86,7 @@ public class FileProcessingService {
             Files.move(filePath, processedDir.resolve(filePath.getFileName()));
             logger.info("File processed successfully");
         } catch (IOException e) {
+            logger.severe("Error moving file to processed directory: " + e.getMessage());
             e.printStackTrace();
         }
     }
