@@ -1,3 +1,7 @@
+package com.example.demo;
+
+import com.example.demo.service.DirectoryMonitorService;
+import com.example.demo.service.FileProcessingService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -59,7 +63,10 @@ public class DirectoryMonitorServiceTest {
         Thread.sleep(500);
 
         // Simulate a file creation event
-        latch.await(1, java.util.concurrent.TimeUnit.SECONDS);
+        watchService.take();  // This should trigger the processing
+
+        // Wait for the latch to count down
+        latch.await();
 
         // Interrupt the monitor thread to stop the infinite loop
         monitorThread.interrupt();
