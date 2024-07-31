@@ -64,3 +64,12 @@ public class DirectoryMonitorServiceTest {
         verify(fileProcessingService, never()).processFile(any(Path.class));
     }
 }
+
+
+
+java.lang.NullPointerException: Cannot invoke "com.example.demo.service.DirectoryMonitorService.watchDirectory()" because "this.directoryMonitorService" is null
+
+	at com.example.demo.DirectoryMonitorServiceTest.testWatchDirectoryWithException(DirectoryMonitorServiceTest.java:71)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:568)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1511)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1511)
