@@ -1,93 +1,70 @@
-package com.example.demo.service;
-
-import ch.qos.logback.classic.Logger;
-import com.example.demo.entity.Transaction;
-import com.example.demo.repository.TransactionRepository;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
-
-import java.io.BufferedReader;
-import java.io.FileReader;
-import java.io.IOException;
-import java.nio.file.Files;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.Mockito;
+import org.mockito.junit.jupiter.MockitoExtension;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardWatchEventKinds;
+import java.nio.file.WatchEvent;
+import java.nio.file.WatchKey;
+import java.nio.file.WatchService;
+import java.util.Collections;
+import java.util.List;
 
-@Service
-public class FileProcessingService {
+import static org.mockito.Mockito.*;
 
-    @Autowired
-    private TransactionRepository transactionRepository;
-    private static final java.util.logging.Logger logger = java.util.logging.Logger.getLogger(FileProcessingService.class.getName());
+@ExtendWith(MockitoExtension.class)
+public class DirectoryMonitorServiceTest {
 
-    public void processFile(Path filePath){
-        try(BufferedReader reader= new BufferedReader(new FileReader(String.valueOf(filePath)))){
-            String line;
-            // Read and discard the header line if present
-            reader.readLine();
+    @Mock
+    private FileProcessingService fileProcessingService;
 
-            while((line=reader.readLine())!=null){
-                String[] fields = line.split("\\|");
+    @Mock
+    private WatchService watchService;
 
-                // Validate the number of fields
-                if(fields.length != 30) {
-                    logger.warning("Unexpected number of fields in line: " + line);
-                    continue; // Skip this line
-                }
+    @Mock
+    private WatchKey watchKey;
 
-                Transaction transaction = new Transaction();
-                transaction.setRic(validateField(fields[0]));
-                transaction.setQdb_ric(validateField(fields[1]));
-                transaction.setSeqno(validateField(fields[2]));
-                transaction.setExDate(validateField(fields[3]));
-                transaction.setPayDate(validateField(fields[4]));
-                transaction.setType(validateField(fields[5]));
-                transaction.setTypeCode(validateField(fields[6]));
-                transaction.setAmount(validateField(fields[7]));
-                transaction.setCcy(validateField(fields[8]));
-                transaction.setBl_Event(validateField(fields[10]));
-                transaction.setDeclareDate(validateField(fields[11]));
-                transaction.setRecordDate(validateField(fields[12]));
-                transaction.setFiscalYeDate(validateField(fields[13]));
-                transaction.setSource(validateField(fields[14]));
-                transaction.setQdb_Type_Code(validateField(fields[15]));
-                transaction.setPdpId(validateField(fields[16]));
-                transaction.setTakara_Amnt(validateField(fields[17]));
-                transaction.setTakara_CpNetAmnt(validateField(fields[18]));
-                transaction.setGlobalPrimaryEsmp(validateField(fields[19]));
-                transaction.setRegionalPrimaryEsmp(validateField(fields[20]));
-                transaction.setCountryCode(validateField(fields[21]));
-                transaction.setIsAusSplit(validateField(fields[22]));
-                transaction.setNxs_Ccy(validateField(fields[23]));
-                transaction.setNxs_DvdId(validateField(fields[24]));
-                transaction.setNxs_DivType(validateField(fields[25]));
-                transaction.setTakaraUpdated(validateField(fields[26]));
-                transaction.setGlobalPrimary(validateField(fields[27]));
-                transaction.setEquityRegionalPrimaryListing(validateField(fields[28]));
-                transaction.setListingType(validateField(fields[29]));
+    @InjectMocks
+    private DirectoryMonitorService directoryMonitorService;
 
-                transactionRepository.save(transaction);
-            }
-        } catch (IOException e){
-            logger.severe("Error reading file: " + e.getMessage());
-            e.printStackTrace();
-        } finally {
-            moveFileToProcessed(filePath);
-        }
+    private Path testDirectory;
+
+    @BeforeEach
+    public void setUp() {
+        testDirectory = Paths.get("C:\\Users\\singhjan\\Downloads\\demo\\demo\\src\\main\\java\\com\\example\\demo\\input_files");
+        directoryMonitorService = new DirectoryMonitorService(fileProcessingService);
     }
 
-    private String validateField(String field) {
-        return (field == null || field.trim().isEmpty()) ? "N/A" : field;
-    }
+    @Test
+    public void testWatchDirectory() throws Exception {
+        // Arrange
+        WatchEvent<Path> mockEvent = (WatchEvent<Path>) mock(WatchEvent.class);
+        Path mockPath = Paths.get("testFile.txt");
+        when(mockEvent.kind()).thenReturn(StandardWatchEventKinds.ENTRY_CREATE);
+        when(mockEvent.context()).thenReturn(mockPath);
 
-    private void moveFileToProcessed(Path filePath) {
-        try {
-            Path processedDir = Paths.get("C:\\Users\\singhjan\\Downloads\\demo\\demo\\src\\main\\java\\com\\example\\demo\\processed_files");
-            Files.move(filePath, processedDir.resolve(filePath.getFileName()));
-            logger.info("File processed successfully");
-        } catch (IOException e) {
-            logger.severe("Error moving file to processed directory: " + e.getMessage());
-            e.printStackTrace();
-        }
+        List<WatchEvent<?>> mockEvents = Collections.singletonList(mockEvent);
+        when(watchKey.pollEvents()).thenReturn(mockEvents);
+        when(watchService.take()).thenReturn(watchKey);
+
+        doNothing().when(fileProcessingService).processFile(any(Path.class));
+
+        // Act
+        // We run the watchDirectory method in a separate thread to simulate the actual behavior
+        Thread monitorThread = new Thread(() -> directoryMonitorService.watchDirectory());
+        monitorThread.start();
+        
+        // Give it a moment to process
+        Thread.sleep(1000);
+        
+        // Interrupt the thread to stop the infinite loop
+        monitorThread.interrupt();
+
+        // Assert
+        verify(fileProcessingService, times(1)).processFile(testDirectory.resolve(mockPath));
     }
 }
