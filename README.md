@@ -7,10 +7,12 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.*;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.nio.file.*;
 import java.util.Collections;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import static org.mockito.Mockito.*;
 
@@ -35,6 +37,9 @@ public class DirectoryMonitorServiceTest {
     public void setUp() {
         testDirectory = Paths.get("C:\\Users\\singhjan\\Downloads\\demo\\demo\\src\\main\\java\\com\\example\\demo\\input_files");
         directoryMonitorService = new DirectoryMonitorService(fileProcessingService, watchService);
+        // Set the private fields using ReflectionTestUtils
+        ReflectionTestUtils.setField(directoryMonitorService, "directory", testDirectory);
+        ReflectionTestUtils.setField(directoryMonitorService, "watchService", watchService);
     }
 
     @Test
@@ -63,11 +68,12 @@ public class DirectoryMonitorServiceTest {
         Thread.sleep(500);
 
         // Simulate a file creation event
-        latch.await(1, java.util.concurrent.TimeUnit.SECONDS);
+        verify(watchService, times(1)).take();  // Verify the watch service was polled
+        verify(fileProcessingService, times(1)).processFile(testDirectory.resolve(mockPath));
 
         // Stop the directory monitoring
         monitorThread.interrupt();
-        monitorThread.join();
+        monitorThread.join(1000);
 
         // Assert
         verify(fileProcessingService, times(1)).processFile(testDirectory.resolve(mockPath));
