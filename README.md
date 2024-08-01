@@ -1,100 +1,135 @@
-package bbejeck.nio.files.watch;
+package com.example.demo.service;
 
-import bbejeck.nio.files.BaseFileTest;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.nio.file.*;
 import java.util.List;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Logger;
 
 import static org.hamcrest.CoreMatchers.is;
-import static org.junit.Assert.*;
-import static java.nio.file.StandardWatchEventKinds.*;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.mockito.Mockito.*;
 
-/**
- * Created by IntelliJ IDEA.
- * User: bbejeck
- * Date: 2/13/12
- * Time: 9:47 PM
- */
+@ExtendWith(MockitoExtension.class)
+class DirectoryMonitorServiceTest {
 
-public class WatchDirectoryTest extends BaseFileTest {
+    @Mock
+    private FileProcessingService fileProcessingService;
+
+    @Mock
     private WatchService watchService;
+
+    @InjectMocks
+    private DirectoryMonitorService directoryMonitorService;
+
+    private Path directory;
     private WatchKey basePathWatchKey;
 
-    @Before
-    public void setUo() throws Exception {
-        super.setUp();
-        watchService = FileSystems.getDefault().newWatchService();
-        basePathWatchKey = basePath.register(watchService,ENTRY_CREATE);
+    @BeforeEach
+    void setUp() throws Exception {
+        directory = Paths.get("C:\\Users\\singhjan\\Downloads\\demo\\demo\\src\\main\\java\\com\\example\\demo\\input_files");
+        basePathWatchKey = directory.register(watchService, StandardWatchEventKinds.ENTRY_CREATE);
     }
 
     @Test
-    public void testEventForDirectory() throws Exception {
-        generateFile(basePath.resolve("newTextFile.txt"), 10);
-        generateFile(basePath.resolve("newTextFileII.txt"), 10);
-        generateFile(basePath.resolve("newTextFileIII.txt"), 10);
-        WatchKey watchKey = watchService.poll(20, TimeUnit.SECONDS);
-        assertNotNull(watchKey);
-        assertThat(watchKey,is(basePathWatchKey));
-        List<WatchEvent<?>> eventList = watchKey.pollEvents();
-        assertThat(eventList.size(), is(3));
-        for (WatchEvent event : eventList) {
-            assertThat(event.kind() == StandardWatchEventKinds.ENTRY_CREATE, is(true));
-            assertThat(event.count(),is(1));
-        }
-        Path eventPath = (Path) eventList.get(0).context();
-        assertThat(Files.isSameFile(eventPath, Paths.get("newTextFile.txt")), is(true));
-        Path watchedPath = (Path) watchKey.watchable();
-        assertThat(Files.isSameFile(watchedPath, basePath), is(true));
+    void testEventForDirectory() throws Exception {
+        // Mock WatchKey and WatchEvent
+        WatchKey mockWatchKey = mock(WatchKey.class);
+        WatchEvent<Path> mockWatchEvent1 = mock(WatchEvent.class);
+        WatchEvent<Path> mockWatchEvent2 = mock(WatchEvent.class);
+        WatchEvent<Path> mockWatchEvent3 = mock(WatchEvent.class);
+
+        // Mock behavior of pollEvents and watchKey
+        when(mockWatchEvent1.context()).thenReturn(Paths.get("newTextFile.txt"));
+        when(mockWatchEvent1.kind()).thenReturn(StandardWatchEventKinds.ENTRY_CREATE);
+        when(mockWatchEvent1.count()).thenReturn(1);
+
+        when(mockWatchEvent2.context()).thenReturn(Paths.get("newTextFileII.txt"));
+        when(mockWatchEvent2.kind()).thenReturn(StandardWatchEventKinds.ENTRY_CREATE);
+        when(mockWatchEvent2.count()).thenReturn(1);
+
+        when(mockWatchEvent3.context()).thenReturn(Paths.get("newTextFileIII.txt"));
+        when(mockWatchEvent3.kind()).thenReturn(StandardWatchEventKinds.ENTRY_CREATE);
+        when(mockWatchEvent3.count()).thenReturn(1);
+
+        when(mockWatchKey.pollEvents()).thenReturn(List.of(mockWatchEvent1, mockWatchEvent2, mockWatchEvent3));
+        when(mockWatchKey.reset()).thenReturn(true);
+        when(watchService.poll(20, TimeUnit.SECONDS)).thenReturn(mockWatchKey);
+
+        // Run the watchDirectory method in a separate thread
+        Executors.newSingleThreadExecutor().submit(() -> {
+            try {
+                directoryMonitorService.watchDirectory();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        });
+
+        // Allow some time for the monitoring process to detect the event
+        TimeUnit.SECONDS.sleep(1);
+
+        // Verify that the fileProcessingService's processFile method was called with the correct path
+        ArgumentCaptor<Path> pathCaptor = ArgumentCaptor.forClass(Path.class);
+        verify(fileProcessingService, times(3)).processFile(pathCaptor.capture());
+
+        List<Path> capturedPaths = pathCaptor.getAllValues();
+        assertThat(capturedPaths.get(0), is(directory.resolve("newTextFile.txt")));
+        assertThat(capturedPaths.get(1), is(directory.resolve("newTextFileII.txt")));
+        assertThat(capturedPaths.get(2), is(directory.resolve("newTextFileIII.txt")));
+
+        // Verify that the watchKey was reset
+        verify(mockWatchKey, times(1)).reset();
     }
 
     @Test
-    public void testEventForDirectoryWatchKey() throws Exception {
-        generateFile(basePath.resolve("newTextFile.txt"), 10);
-        List<WatchEvent<?>> eventList = basePathWatchKey.pollEvents();
-        while (eventList.size() == 0 ){
-            eventList = basePathWatchKey.pollEvents();
-            Thread.sleep(10000);
-        }
-        assertThat(eventList.size(), is(1));
-        for (WatchEvent event : eventList) {
-            assertThat(event.kind() == StandardWatchEventKinds.ENTRY_CREATE, is(true));
-        }
-        basePathWatchKey.reset();
-        generateFile(basePath.resolve("newTextFileII.txt"), 10);
-        generateFile(basePath.resolve("newTextFileIII.txt"), 10);
-        while (eventList.size() == 0 ){
-            eventList = basePathWatchKey.pollEvents();
-            Thread.sleep(10000);
-        }
-        Path eventPath = (Path) eventList.get(0).context();
-        assertThat(Files.isSameFile(eventPath, Paths.get("newTextFile.txt")), is(true));
-        Path watchedPath = (Path) basePathWatchKey.watchable();
-        assertThat(Files.isSameFile(watchedPath, basePath), is(true));
+    void testEventForSubDirectory() throws Exception {
+        Path subDirectory = directory.resolve("subDir");
+        subDirectory.toFile().mkdirs(); // Create the sub-directory
+        WatchKey subDirWatchKey = subDirectory.register(watchService, StandardWatchEventKinds.ENTRY_CREATE);
+
+        // Mock WatchKey and WatchEvent for sub-directory
+        WatchKey mockWatchKey = mock(WatchKey.class);
+        WatchEvent<Path> mockWatchEvent = mock(WatchEvent.class);
+
+        // Mock behavior of pollEvents and watchKey
+        when(mockWatchEvent.context()).thenReturn(Paths.get("newTextFile.txt"));
+        when(mockWatchEvent.kind()).thenReturn(StandardWatchEventKinds.ENTRY_CREATE);
+        when(mockWatchEvent.count()).thenReturn(1);
+
+        when(mockWatchKey.pollEvents()).thenReturn(List.of(mockWatchEvent));
+        when(mockWatchKey.reset()).thenReturn(true);
+        when(watchService.poll(20, TimeUnit.SECONDS)).thenReturn(mockWatchKey);
+
+        // Generate a file in the sub-directory
+        Files.createFile(subDirectory.resolve("newTextFile.txt"));
+
+        // Run the watchDirectory method in a separate thread
+        Executors.newSingleThreadExecutor().submit(() -> {
+            try {
+                directoryMonitorService.watchDirectory();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        });
+
+        // Allow some time for the monitoring process to detect the event
+        TimeUnit.SECONDS.sleep(1);
+
+        // Verify that the fileProcessingService's processFile method was called with the correct path
+        ArgumentCaptor<Path> pathCaptor = ArgumentCaptor.forClass(Path.class);
+        verify(fileProcessingService).processFile(pathCaptor.capture());
+        assertThat(pathCaptor.getValue(), is(subDirectory.resolve("newTextFile.txt")));
+
+        // Verify that the watchKey was reset
+        verify(mockWatchKey, times(1)).reset();
     }
-
-
-
-    @Test
-    public void testEventForSubDirectory() throws Exception {
-        dir1Path.register(watchService, StandardWatchEventKinds.ENTRY_CREATE);
-        generateFile(basePath.resolve("newTextFile.txt"), 10);
-        generateFile(dir1Path.resolve("newTextFile.txt"), 10);
-        int count = 0;
-        while (count < 2) {
-            WatchKey watchKey = watchService.poll(20, TimeUnit.SECONDS);
-            Path watchedPath = (Path) watchKey.watchable();
-            assertNotNull(watchKey);
-            List<WatchEvent<?>> eventList = watchKey.pollEvents();
-            WatchEvent event = eventList.get(0);
-            assertThat(event.count(), is(1));
-            assertThat(event.kind() == StandardWatchEventKinds.ENTRY_CREATE, is(true));
-            assertTrue(Files.isSameFile((Path) event.context(), Paths.get("newTextFile.txt")));
-            count++;
-        }
-    }
-
-
 }
