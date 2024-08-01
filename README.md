@@ -233,3 +233,79 @@ public class DirectoryMonitorService {
     }
 }
 
+package com.example.demo.service;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardWatchEventKinds;
+import java.nio.file.WatchEvent;
+import java.nio.file.WatchKey;
+import java.nio.file.WatchService;
+import java.util.List;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.logging.Logger;
+
+import static org.mockito.Mockito.*;
+
+@ExtendWith(MockitoExtension.class)
+class DirectoryMonitorServiceTest {
+
+    @Mock
+    private FileProcessingService fileProcessingService;
+
+    @Mock
+    private WatchService watchService;
+
+    @InjectMocks
+    private DirectoryMonitorService directoryMonitorService;
+
+    private Path directory;
+
+    @BeforeEach
+    void setUp() {
+        directory = Paths.get("C:\\Users\\singhjan\\Downloads\\demo\\demo\\src\\main\\java\\com\\example\\demo\\input_files");
+    }
+
+    @Test
+    void testWatchDirectory() throws Exception {
+        // Mock WatchKey and WatchEvent
+        WatchKey mockWatchKey = mock(WatchKey.class);
+        WatchEvent<Path> mockWatchEvent = mock(WatchEvent.class);
+
+        // Mock behavior of pollEvents and watchKey
+        when(mockWatchEvent.context()).thenReturn(Paths.get("newFile.txt"));
+        when(mockWatchEvent.kind()).thenReturn(StandardWatchEventKinds.ENTRY_CREATE);
+        when(mockWatchKey.pollEvents()).thenReturn(List.of(mockWatchEvent));
+        when(mockWatchKey.reset()).thenReturn(true);
+        when(watchService.take()).thenReturn(mockWatchKey);
+
+        // Run the watchDirectory method in a separate thread
+        Executors.newSingleThreadExecutor().submit(() -> {
+            try {
+                directoryMonitorService.watchDirectory();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        });
+
+        // Allow some time for the monitoring process to detect the event
+        TimeUnit.SECONDS.sleep(1);
+
+        // Verify that the fileProcessingService's processFile method was called with the correct path
+        ArgumentCaptor<Path> pathCaptor = ArgumentCaptor.forClass(Path.class);
+        verify(fileProcessingService).processFile(pathCaptor.capture());
+        assert pathCaptor.getValue().equals(directory.resolve("newFile.txt"));
+
+        // Stop the directory monitoring
+        verify(mockWatchKey).reset();
+    }
+}
