@@ -1,31 +1,38 @@
 import static org.mockito.Mockito.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
-import org.springframework.boot.test.context.SpringBootTest;
+import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.nio.file.*;
 import java.util.Collections;
 import java.util.concurrent.TimeUnit;
 
-@SpringBootTest
+@ExtendWith(MockitoExtension.class)
 public class DirectoryMonitorServiceTest {
 
-    private DirectoryMonitorService directoryMonitorService;
-    private Path mockDirectoryPath;
+    @Mock
     private FileProcessingService mockFileProcessingService;
+
+    @Mock
     private WatchService mockWatchService;
+
+    @Mock
+    private Path mockDirectoryPath;
+
+    @Mock
     private WatchKey mockWatchKey;
+
+    private DirectoryMonitorService directoryMonitorService;
     private int counter;
 
     @BeforeEach
     public void setUp() {
         MockitoAnnotations.openMocks(this);
-        mockFileProcessingService = mock(FileProcessingService.class);
-        mockWatchService = mock(WatchService.class);
-        mockDirectoryPath = mock(Path.class);
-        mockWatchKey = mock(WatchKey.class);
         counter = 0;
 
         // Instantiate DirectoryMonitorService with the mocked WatchService
