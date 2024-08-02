@@ -1,78 +1,83 @@
-package com.example.demo.service;
-
+import static org.mockito.Mockito.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
+import org.mockito.MockitoAnnotations;
+import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.nio.file.*;
-import java.util.logging.Logger;
+import java.util.Collections;
+import java.util.concurrent.TimeUnit;
 
-import static org.mockito.Mockito.*;
+@SpringBootTest
+public class DirectoryMonitorServiceTest {
 
-class DirectoryMonitorServiceTest {
-
-    private FileProcessingService fileProcessingService;
     private DirectoryMonitorService directoryMonitorService;
+    private Path mockDirectoryPath;
+    private FileProcessingService mockFileProcessingService;
     private WatchService mockWatchService;
     private WatchKey mockWatchKey;
+    private int counter;
 
     @BeforeEach
-    void setUp() throws Exception {
-        fileProcessingService = mock(FileProcessingService.class);
+    public void setUp() {
+        MockitoAnnotations.openMocks(this);
+        mockFileProcessingService = mock(FileProcessingService.class);
         mockWatchService = mock(WatchService.class);
+        mockDirectoryPath = mock(Path.class);
         mockWatchKey = mock(WatchKey.class);
+        counter = 0;
 
-        // Mock WatchService behavior
-        when(mockWatchService.take()).thenReturn(mockWatchKey);
+        // Instantiate DirectoryMonitorService with the mocked WatchService
+        directoryMonitorService = new DirectoryMonitorService(mockFileProcessingService, mockWatchService);
 
-        // Initialize DirectoryMonitorService with mocked WatchService
-        directoryMonitorService = new DirectoryMonitorService(fileProcessingService);
-        ReflectionTestUtils.setField(directoryMonitorService, "watchService", mockWatchService);
-
-        // Configure the mockWatchKey to return a specific WatchEvent
-        WatchEvent<Path> mockEvent = mock(WatchEvent.class);
-        Path filePath = Paths.get("testFile.txt");
-        when(mockEvent.context()).thenReturn(filePath);
-        when(mockWatchKey.pollEvents()).thenReturn(Collections.singletonList(mockEvent));
+        // Use ReflectionTestUtils to set the private final field
+        ReflectionTestUtils.setField(directoryMonitorService, "directory", mockDirectoryPath);
     }
 
     @Test
-    void testWatchDirectory() throws Exception {
-        // Run the method in a separate thread to avoid blocking the test
+    public void testWatchDirectory() throws Exception {
+        Path mockAbsolutePath = mock(Path.class);
+        when(mockDirectoryPath.toAbsolutePath()).thenReturn(mockAbsolutePath);
+        when(mockAbsolutePath.toString()).thenReturn("mockAbsolutePath");
+
+        // Mock WatchService and WatchKey behavior
+        when(mockWatchService.take()).thenAnswer(invocation -> {
+            if (counter++ < 2) return mockWatchKey; // Return mockWatchKey for the first 2 calls
+            else return null; // Simulate no more events to stop the loop
+        });
+
+        WatchEvent<Path> mockWatchEvent = mock(WatchEvent.class);
+        Path mockFilePath = mock(Path.class);
+        when(mockWatchEvent.kind()).thenReturn(StandardWatchEventKinds.ENTRY_CREATE);
+        when(mockWatchEvent.context()).thenReturn(mockFilePath);
+        when(mockWatchKey.pollEvents()).thenReturn(Collections.singletonList(mockWatchEvent));
+
+        // Mock the directory registration
+        when(mockDirectoryPath.register(any(WatchService.class), eq(StandardWatchEventKinds.ENTRY_CREATE)))
+                .thenReturn(mockWatchKey);
+
+        // Run the method under test in a separate thread
         Thread thread = new Thread(() -> {
             try {
                 directoryMonitorService.watchDirectory();
             } catch (Exception e) {
+                // Handle or log exception if necessary
                 e.printStackTrace();
             }
         });
-
         thread.start();
+
+        // Wait for a bit to let the thread run
+        TimeUnit.SECONDS.sleep(1);
+
+        // Interrupt the thread to stop execution
+        thread.interrupt();
         thread.join();
 
-        // Verify interactions
-        verify(fileProcessingService).processFile(Paths.get("C:\\Users\\singhjan\\Downloads\\demo\\demo\\src\\main\\java\\com\\example\\demo\\input_files\\testFile.txt"));
-    }
-
-    @Test
-    void testWatchDirectoryException() throws Exception {
-        // Simulate an exception when taking from the WatchService
-        when(mockWatchService.take()).thenThrow(new RuntimeException("WatchService exception"));
-
-        // Run the method in a separate thread to avoid blocking the test
-        Thread thread = new Thread(() -> {
-            try {
-                directoryMonitorService.watchDirectory();
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        });
-
-        thread.start();
-        thread.join();
-
-        // Verify exception handling (you can enhance this based on your logging or error handling logic)
-        // For example, check if the error message was logged correctly
-    }
+        // Verify interactions with the mocks
+        verify(mockDirectoryPath).toAbsolutePath();
+        verify(mockDirectoryPath).register(any(WatchService.class), eq(StandardWatchEventKinds.ENTRY_CREATE));
+        verify(mockFileProcessingService, times(2)).processFile(mockFilePath); // Processed twice
+    }
 }
