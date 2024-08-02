@@ -1,4 +1,5 @@
 import static org.mockito.Mockito.*;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -6,8 +7,8 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.test.util.ReflectionTestUtils;
 
+import java.io.IOException;
 import java.nio.file.*;
 import java.util.Collections;
 import java.util.concurrent.TimeUnit;
@@ -21,31 +22,44 @@ public class DirectoryMonitorServiceTest {
     @Mock
     private WatchService mockWatchService;
 
-    @Mock
-    private Path mockDirectoryPath;
-
-    @Mock
-    private WatchKey mockWatchKey;
-
+    @InjectMocks
     private DirectoryMonitorService directoryMonitorService;
+
+    private Path tempDirectory;
+    private WatchKey mockWatchKey;
     private int counter;
 
     @BeforeEach
-    public void setUp() {
+    public void setUp() throws IOException {
         MockitoAnnotations.openMocks(this);
         counter = 0;
 
-        // Instantiate DirectoryMonitorService with the mocked WatchService
-        directoryMonitorService = new DirectoryMonitorService(mockFileProcessingService, mockWatchService);
+        // Create a temporary directory for testing
+        tempDirectory = Files.createTempDirectory("testDir");
+        mockWatchKey = mock(WatchKey.class);
 
         // Use ReflectionTestUtils to set the private final field
-        ReflectionTestUtils.setField(directoryMonitorService, "directory", mockDirectoryPath);
+        ReflectionTestUtils.setField(directoryMonitorService, "directory", tempDirectory);
+    }
+
+    @AfterEach
+    public void tearDown() throws IOException {
+        // Clean up the temporary directory
+        Files.walk(tempDirectory)
+                .sorted((p1, p2) -> p2.compareTo(p1)) // Delete files before directories
+                .forEach(path -> {
+                    try {
+                        Files.delete(path);
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                });
     }
 
     @Test
     public void testWatchDirectory() throws Exception {
         Path mockAbsolutePath = mock(Path.class);
-        when(mockDirectoryPath.toAbsolutePath()).thenReturn(mockAbsolutePath);
+        when(tempDirectory.toAbsolutePath()).thenReturn(mockAbsolutePath);
         when(mockAbsolutePath.toString()).thenReturn("mockAbsolutePath");
 
         // Mock WatchService and WatchKey behavior
@@ -61,7 +75,7 @@ public class DirectoryMonitorServiceTest {
         when(mockWatchKey.pollEvents()).thenReturn(Collections.singletonList(mockWatchEvent));
 
         // Mock the directory registration
-        when(mockDirectoryPath.register(any(WatchService.class), eq(StandardWatchEventKinds.ENTRY_CREATE)))
+        when(tempDirectory.register(any(WatchService.class), eq(StandardWatchEventKinds.ENTRY_CREATE)))
                 .thenReturn(mockWatchKey);
 
         // Run the method under test in a separate thread
@@ -83,8 +97,8 @@ public class DirectoryMonitorServiceTest {
         thread.join();
 
         // Verify interactions with the mocks
-        verify(mockDirectoryPath).toAbsolutePath();
-        verify(mockDirectoryPath).register(any(WatchService.class), eq(StandardWatchEventKinds.ENTRY_CREATE));
+        verify(tempDirectory).toAbsolutePath();
+        verify(tempDirectory).register(any(WatchService.class), eq(StandardWatchEventKinds.ENTRY_CREATE));
         verify(mockFileProcessingService, times(2)).processFile(mockFilePath); // Processed twice
     }
 }
