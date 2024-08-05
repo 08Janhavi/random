@@ -1,52 +1,47 @@
 package com.example.demo.service;
 
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
 
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardWatchEventKinds;
-import java.nio.file.WatchEvent;
-import java.nio.file.WatchKey;
-import java.nio.file.WatchService;
+import java.io.IOException;
+import java.nio.file.*;
+import java.util.logging.Logger;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
+@Service
+public class DirectoryMonitorService {
 
-@ExtendWith(MockitoExtension.class)
-public class DirectoryMonitorServiceTest {
+    private final Path directory;
+    private final FileProcessingService fileProcessingService;
+    private final WatchService watchService;
+    private WatchKey key;
+    private static final Logger logger = Logger.getLogger(DirectoryMonitorService.class.getName());
 
-    @Mock
-    private FileProcessingService fileProcessingService;
-
-    @Mock
-    private WatchService watchService;
-
-    @Mock
-    private WatchKey watchKey;
-
-    @InjectMocks
-    private DirectoryMonitorService directoryMonitorService;
-
-    private Path testDirectory;
-
-    @BeforeEach
-    public void setup() {
-        testDirectory = Paths.get("C:\\Users\\singhjan\\Downloads\\demo\\demo\\src\\main\\java\\com\\example\\demo\\input_files");
+    @Autowired
+    public DirectoryMonitorService(FileProcessingService fileProcessingService,WatchKey key) throws IOException {
+        this.directory = Paths.get("C:\\Users\\singhjan\\Downloads\\demo\\demo\\src\\main\\java\\com\\example\\demo\\input_files");  // Directory to monitor
+        this.fileProcessingService = fileProcessingService;
+        this.watchService=FileSystems.getDefault().newWatchService();
+        this.key=key;
     }
 
-    @Test
-    public void testWatchDirectory() throws Exception {
-        when(watchService.take()).thenReturn(watchKey);
-        when(watchKey.pollEvents()).thenReturn(List.of(mock(WatchEvent.class)));
-        when(watchKey.reset()).thenReturn(true);
+    public void watchDirectory() {
+        logger.info("Starting directory monitoring for directory: " + directory.toAbsolutePath());
 
-        directoryMonitorService.watchDirectory();
+            try ( watchService ) {
+                directory.register(watchService, StandardWatchEventKinds.ENTRY_CREATE);
 
-        verify(fileProcessingService, times(1)).processFile(any(Path.class));
-    }
+
+                while ((key = watchService.take()) != null) {
+                    for (WatchEvent<?> event : key.pollEvents()) {
+                        Path filePath = directory.resolve((Path) event.context());
+                        logger.info("Detected new file: " + filePath.toString());
+                        fileProcessingService.processFile(filePath);
+                    }
+                    key.reset();
+                }
+            } catch (Exception e) {
+                logger.severe("Error in directory monitoring: " + e.getMessage());
+            }
+
+    }
 }
