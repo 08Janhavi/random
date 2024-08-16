@@ -2,125 +2,109 @@ package com.example.demo.service;
 
 import com.example.demo.entity.Transaction;
 import com.example.demo.repository.TransactionRepository;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Service;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.logging.Logger;
 
-@Service
-public class FileProcessingService {
-    @Value("${processed.directory}")
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.Mockito.*;
+
+@ExtendWith(MockitoExtension.class)
+class FileProcessingServiceTest {
+
+    @Mock
+    private TransactionRepository transactionRepository;
+
+    @Mock
     private Path processedDirectory;
 
-    @Autowired
-    private TransactionRepository transactionRepository;
-    private static final Logger logger = Logger.getLogger(FileProcessingService.class.getName());
+    @InjectMocks
+    private FileProcessingService fileProcessingService;
 
-    public void processFile(Path filePath) {
-        Path processedDir=Paths.get(processedDirectory.toUri());
-        Path targetFilePath=processedDir.resolve(filePath.getFileName());
-        if (Files.exists(targetFilePath)){
-            logger.info("File already processed " + filePath.getFileName());
-            moveFileToProcessed(filePath);
-            return;
-        }
-        List<Transaction> transactions=new ArrayList<>();
-//        ExecutorService executorService= Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
-        try (BufferedReader reader = new BufferedReader(new FileReader(String.valueOf(filePath)))) {
-            String line;
-            reader.readLine();
+    private Path filePath;
 
-            while ((line = reader.readLine()) != null) {
-                String[] fields = line.split("\\|");
-
-                if (fields.length != 30) {
-                    logger.warning("Unexpected number of fields in line: " + line);
-                    continue;
-                }
-
-                Transaction transaction = new Transaction();
-                transaction.setRic(validateField(fields[0]));
-                transaction.setQdb_ric(validateField(fields[1]));
-                transaction.setSeqno(validateField(fields[2]));
-                transaction.setExDate(validateField(fields[3]));
-                transaction.setPayDate(validateField(fields[4]));
-                transaction.setType(validateField(fields[5]));
-                transaction.setTypeCode(validateField(fields[6]));
-                transaction.setAmount(validateField(fields[7]));
-                transaction.setCcy(validateField(fields[8]));
-                transaction.setBl_Event(validateField(fields[10]));
-                transaction.setDeclareDate(validateField(fields[11]));
-                transaction.setRecordDate(validateField(fields[12]));
-                transaction.setFiscalYeDate(validateField(fields[13]));
-                transaction.setSource(validateField(fields[14]));
-                transaction.setQdb_Type_Code(validateField(fields[15]));
-                transaction.setPdpId(validateField(fields[16]));
-                transaction.setTakara_Amnt(validateField(fields[17]));
-                transaction.setTakara_CpNetAmnt(validateField(fields[18]));
-                transaction.setGlobalPrimaryEsmp(validateField(fields[19]));
-                transaction.setRegionalPrimaryEsmp(validateField(fields[20]));
-                transaction.setCountryCode(validateField(fields[21]));
-                transaction.setIsAusSplit(validateField(fields[22]));
-                transaction.setNxs_Ccy(validateField(fields[23]));
-                transaction.setNxs_DvdId(validateField(fields[24]));
-                transaction.setNxs_DivType(validateField(fields[25]));
-                transaction.setTakaraUpdated(validateField(fields[26]));
-                transaction.setGlobalPrimary(validateField(fields[27]));
-                transaction.setEquityRegionalPrimaryListing(validateField(fields[28]));
-                transaction.setListingType(validateField(fields[29]));
-                transactions.add(transaction);
-                if(transactions.size()>=1000){
-                    transactionRepository.saveAll(transactions);
-                    transactions.clear();
-                }
-            }
-        } catch (IOException e) {
-            logger.severe("Error reading file: " + e.getMessage());
-            e.printStackTrace();
-        } finally {
-            if(!transactions.isEmpty()){
-                transactionRepository.saveAll(transactions);
-            }
-            moveFileToProcessed(filePath);
-        }
+    @BeforeEach
+    void setUp() {
+        filePath = mock(Path.class);
+        MockitoAnnotations.openMocks(this);
     }
 
-    private String validateField(String field) {
-        return (field.trim().isEmpty()) ? "N/A" : field;
+    @Test
+    void processFile_FileAlreadyProcessed() throws IOException {
+        when(filePath.getFileName()).thenReturn(mock(Path.class));
+        when(processedDirectory.resolve(any(Path.class))).thenReturn(mock(Path.class));
+        when(Files.exists(any(Path.class))).thenReturn(true);
+
+        fileProcessingService.processFile(filePath);
+
+        verify(transactionRepository, never()).saveAll(anyList());
+        verify(fileProcessingService, times(1)).moveFileToProcessed(filePath);
     }
 
-    private void moveFileToProcessed(Path filePath) {
-        try {
-            Path processedDir = Paths.get(processedDirectory.toUri());
-            Path targetPath= processedDir.resolve(filePath.getFileName());
-            if(Files.exists(targetPath)){}
-            else{
-                Files.move(filePath, targetPath);
-                logger.info("File processed successfully");
-            }
-        } catch (IOException e) {
-            logger.severe("Error moving file to processed directory: " + e.getMessage());
-            e.printStackTrace();
-        }
+    @Test
+    void processFile_FileSuccessfullyProcessed() throws IOException {
+        when(filePath.getFileName()).thenReturn(mock(Path.class));
+        when(processedDirectory.resolve(any(Path.class))).thenReturn(mock(Path.class));
+        when(Files.exists(any(Path.class))).thenReturn(false);
+
+        BufferedReader reader = mock(BufferedReader.class);
+        when(reader.readLine()).thenReturn("header", "line1|field|data", (String) null);
+        whenNew(BufferedReader.class).withArguments(any(FileReader.class)).thenReturn(reader);
+
+        fileProcessingService.processFile(filePath);
+
+        verify(transactionRepository, times(1)).saveAll(anyList());
+        verify(fileProcessingService, times(1)).moveFileToProcessed(filePath);
+    }
+
+    @Test
+    void processFile_ErrorReadingFile() throws IOException {
+        when(filePath.getFileName()).thenReturn(mock(Path.class));
+        when(processedDirectory.resolve(any(Path.class))).thenReturn(mock(Path.class));
+        when(Files.exists(any(Path.class))).thenReturn(false);
+
+        BufferedReader reader = mock(BufferedReader.class);
+        when(reader.readLine()).thenThrow(new IOException("Test exception"));
+
+        assertThrows(IOException.class, () -> fileProcessingService.processFile(filePath));
+
+        verify(transactionRepository, never()).saveAll(anyList());
+        verify(fileProcessingService, times(1)).moveFileToProcessed(filePath);
+    }
+
+    @Test
+    void moveFileToProcessed_Success() throws IOException {
+        when(filePath.getFileName()).thenReturn(mock(Path.class));
+        when(processedDirectory.resolve(any(Path.class))).thenReturn(mock(Path.class));
+        when(Files.exists(any(Path.class))).thenReturn(false);
+
+        fileProcessingService.moveFileToProcessed(filePath);
+
+        verify(Files, times(1)).move(any(Path.class), any(Path.class));
+    }
+
+    @Test
+    void moveFileToProcessed_FileAlreadyExists() throws IOException {
+        when(filePath.getFileName()).thenReturn(mock(Path.class));
+        when(processedDirectory.resolve(any(Path.class))).thenReturn(mock(Path.class));
+        when(Files.exists(any(Path.class))).thenReturn(true);
+
+        fileProcessingService.moveFileToProcessed(filePath);
+
+        verify(Files, never()).move(any(Path.class), any(Path.class));
     }
 }
-
-
-
-
-
-
-
-
-
