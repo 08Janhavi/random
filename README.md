@@ -5,6 +5,7 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 
+import ch.qos.logback.core.net.SyslogOutputStream;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
@@ -27,37 +28,49 @@ public class IMLineageDataDAO {
 		List<Table> dbTables=jdbcTemplate.query(dbTableQuery,new RowMapper<Table>(){
 			@Override
 			public Table mapRow(ResultSet rs,int rowNum) throws SQLException{
-				return new Table(
+				Table table= new Table(
 						rs.getString("database_name"),
 						rs.getString("db_table_name"),
 						new ArrayList<>()
 				);
+				System.out.println(table);
+				return table;
 			}
 		});
 
 		for(Table dbTable:dbTables) {
-			String tableColumnQuery = "SELECT db_column_id,db_column_name,process_name FROM dbo.lineage_data_db_table_columns where db_table_id IN (SELECT db_table_id FROM dbo.lineage_data_db_tables) ";
-			List<TableColumn> tableColumns = jdbcTemplate.query(tableColumnQuery, new Object[]{dbTable.tableName()}, new RowMapper<TableColumn>() {
+			System.out.println(dbTables);
+			String tableColumnQuery = "SELECT db_column_id,db_column_name,process_name FROM dbo.lineage_data_db_table_columns ";
+			List<TableColumn> tableColumns = jdbcTemplate.query(tableColumnQuery,  new RowMapper<TableColumn>() {
+
 				@Override
 				public TableColumn mapRow(ResultSet rs, int rowNum) throws SQLException {
-					return new TableColumn(
+					System.out.println(rs);
+					TableColumn tableColumn= new TableColumn(
 							rs.getString("db_column_name"),
 							rs.getString("process_name"),
 							new ArrayList<>()
 					);
+					System.out.println(tableColumn);
+					return tableColumn;
 				}
 			});
 
+			System.out.println("psc: "+ tableColumns);
+
 			for (TableColumn tableColumn : tableColumns) {
-				String fileColumnQuery = "SELECT file_column_name,file_name,file_source FROM dbo.lineage_data_file_columns where db_column_id IN (SELECT db_column_id from dbo.lineage_data_db_table_columns)";
-				List<FileColumn> fileColumns = jdbcTemplate.query(fileColumnQuery, new Object[]{tableColumn.columnName()}, new RowMapper<FileColumn>() {
+				System.out.println("js "+tableColumn);
+				String fileColumnQuery = "SELECT file_column_name,file_name,file_source FROM dbo.lineage_data_file_columns ";
+				List<FileColumn> fileColumns = jdbcTemplate.query(fileColumnQuery, new RowMapper<FileColumn>() {
 					@Override
 					public FileColumn mapRow(ResultSet rs, int rowNum) throws SQLException {
-						return new FileColumn(
+						FileColumn fileColumn= new FileColumn(
 								rs.getString("file_column_name"),
 								rs.getString("file_name"),
 								rs.getString("file_source")
 						);
+						System.out.println(fileColumn);
+						return fileColumn;
 					}
 				});
 
@@ -68,7 +81,7 @@ public class IMLineageDataDAO {
 		lineageData.addAll(dbTables);
 		
 		//TODO: IMPLEMENT YOUR CODE HERE
-		
+		System.out.println(lineageData);
 		return lineageData;
 	}
 }
