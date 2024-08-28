@@ -36,50 +36,59 @@ public class IMLineageDataDAOTest {
         MockitoAnnotations.openMocks(this);
     }
 
-    private void mockResultSet(ResultSet resultSet, List<String> columns, List<List<String>> rows) throws SQLException {
-        when(resultSet.next()).thenAnswer(invocation -> {
-            boolean hasNext = !rows.isEmpty();
-            if (hasNext) {
+    private ResultSet mockResultSet(List<List<String>> rows, List<String> columns) throws SQLException {
+        ResultSet rs = mock(ResultSet.class);
+        when(rs.next()).thenAnswer(invocation -> {
+            if (rows.isEmpty()) {
+                return false;
+            } else {
                 List<String> row = rows.remove(0);
                 for (int i = 0; i < columns.size(); i++) {
-                    when(resultSet.getString(columns.get(i))).thenReturn(row.get(i));
+                    when(rs.getString(columns.get(i))).thenReturn(row.get(i));
                 }
+                return true;
             }
-            return hasNext;
         });
+        return rs;
     }
 
     @Test
     public void testGetLineageDataFromDB() throws SQLException {
         // Mock result set for db tables
-        mockResultSet(resultSet, Arrays.asList("db_table_id", "database_name", "db_table_name"),
-                Arrays.asList(Arrays.asList("tableId1", "database1", "table1")));
+        ResultSet dbTableResultSet = mockResultSet(
+            Arrays.asList(Arrays.asList("tableId1", "database1", "table1")),
+            Arrays.asList("db_table_id", "database_name", "db_table_name")
+        );
 
         when(jdbcTemplate.query(eq("SELECT db_table_id,database_name,db_table_name FROM dbo.lineage_data_db_tables"), any(RowMapper.class)))
-                .thenAnswer(invocation -> {
-                    RowMapper<Table> rowMapper = invocation.getArgument(1);
-                    return Arrays.asList(rowMapper.mapRow(resultSet, 1));
-                });
+            .thenAnswer(invocation -> {
+                RowMapper<Table> rowMapper = invocation.getArgument(1);
+                return Arrays.asList(rowMapper.mapRow(dbTableResultSet, 1));
+            });
 
         // Mock result set for table columns
-        mockResultSet(resultSet, Arrays.asList("db_column_id", "db_column_name", "process_name"),
-                Arrays.asList(Arrays.asList("columnId1", "columnName1", "process1")));
+        ResultSet tableColumnResultSet = mockResultSet(
+            Arrays.asList(Arrays.asList("columnId1", "columnName1", "process1")),
+            Arrays.asList("db_column_id", "db_column_name", "process_name")
+        );
 
         when(jdbcTemplate.query(eq("SELECT db_column_id,db_column_name,process_name FROM dbo.lineage_data_db_table_columns WHERE db_table_id=?"), eq(new Object[]{"tableId1"}), any(RowMapper.class)))
-                .thenAnswer(invocation -> {
-                    RowMapper<TableColumn> rowMapper = invocation.getArgument(2);
-                    return Arrays.asList(rowMapper.mapRow(resultSet, 1));
-                });
+            .thenAnswer(invocation -> {
+                RowMapper<TableColumn> rowMapper = invocation.getArgument(2);
+                return Arrays.asList(rowMapper.mapRow(tableColumnResultSet, 1));
+            });
 
         // Mock result set for file columns
-        mockResultSet(resultSet, Arrays.asList("file_column_name", "file_name", "file_source"),
-                Arrays.asList(Arrays.asList("fileColumnName1", "fileName1", "fileSource1")));
+        ResultSet fileColumnResultSet = mockResultSet(
+            Arrays.asList(Arrays.asList("fileColumnName1", "fileName1", "fileSource1")),
+            Arrays.asList("file_column_name", "file_name", "file_source")
+        );
 
         when(jdbcTemplate.query(eq("SELECT file_column_name,file_name,file_source FROM dbo.lineage_data_file_columns WHERE db_column_id=?"), eq(new Object[]{"columnId1"}), any(RowMapper.class)))
-                .thenAnswer(invocation -> {
-                    RowMapper<FileColumn> rowMapper = invocation.getArgument(2);
-                    return Arrays.asList(rowMapper.mapRow(resultSet, 1));
-                });
+            .thenAnswer(invocation -> {
+                RowMapper<FileColumn> rowMapper = invocation.getArgument(2);
+                return Arrays.asList(rowMapper.mapRow(fileColumnResultSet, 1));
+            });
 
         // Run the method to test
         List<Table> lineageData = imLineageDataDAO.getLineageDataFromDB();
@@ -116,7 +125,7 @@ public class IMLineageDataDAOTest {
     public void testGetLineageDataFromDB_NoTables() throws SQLException {
         // Mock empty dbTable data
         when(jdbcTemplate.query(eq("SELECT db_table_id,database_name,db_table_name FROM dbo.lineage_data_db_tables"), any(RowMapper.class)))
-                .thenReturn(Collections.emptyList());
+            .thenReturn(Collections.emptyList());
 
         // Run the method to test
         List<Table> lineageData = imLineageDataDAO.getLineageDataFromDB();
@@ -134,11 +143,11 @@ public class IMLineageDataDAOTest {
         // Mock dbTable data
         Table tableMock = new Table("tableId1", "database1", "table1", Collections.emptyList());
         when(jdbcTemplate.query(eq("SELECT db_table_id,database_name,db_table_name FROM dbo.lineage_data_db_tables"), any(RowMapper.class)))
-                .thenReturn(Arrays.asList(tableMock));
+            .thenReturn(Arrays.asList(tableMock));
 
         // Mock empty tableColumn data
         when(jdbcTemplate.query(eq("SELECT db_column_id,db_column_name,process_name FROM dbo.lineage_data_db_table_columns WHERE db_table_id=?"), eq(new Object[]{"tableId1"}), any(RowMapper.class)))
-                .thenReturn(Collections.emptyList());
+            .thenReturn(Collections.emptyList());
 
         // Run the method to test
         List<Table> lineageData = imLineageDataDAO.getLineageDataFromDB();
@@ -160,16 +169,16 @@ public class IMLineageDataDAOTest {
         // Mock dbTable data
         Table tableMock = new Table("tableId1", "database1", "table1", new ArrayList<>());
         when(jdbcTemplate.query(eq("SELECT db_table_id,database_name,db_table_name FROM dbo.lineage_data_db_tables"), any(RowMapper.class)))
-                .thenReturn(Arrays.asList(tableMock));
+            .thenReturn(Arrays.asList(tableMock));
 
         // Mock tableColumn data
         TableColumn columnMock = new TableColumn("columnId1", "columnName1", "process1", new ArrayList<>());
         when(jdbcTemplate.query(eq("SELECT db_column_id,db_column_name,process_name FROM dbo.lineage_data_db_table_columns WHERE db_table_id=?"), eq(new Object[]{"tableId1"}), any(RowMapper.class)))
-                .thenReturn(Arrays.asList(columnMock));
+            .thenReturn(Arrays.asList(columnMock));
 
         // Mock empty fileColumn data
         when(jdbcTemplate.query(eq("SELECT file_column_name,file_name,file_source FROM dbo.lineage_data_file_columns WHERE db_column_id=?"), eq(new Object[]{"columnId1"}), any(RowMapper.class)))
-                .thenReturn(Collections.emptyList());
+            .thenReturn(Collections.emptyList());
 
         // Run the method to test
         List<Table> lineageData = imLineageDataDAO.getLineageDataFromDB();
