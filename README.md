@@ -1,73 +1,96 @@
-package com.nomura.im.lineage.service;
+package com.nomura.im.lineage.dao;
 
-import org.apache.poi.ss.usermodel.Workbook;
-import org.springframework.stereotype.Service;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
 
-import java.io.FileOutputStream;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
+import org.springframework.stereotype.Repository;
 
-@Service
-public class LineagePublisherService {
+import com.nomura.im.lineage.vo.Table;
+import com.nomura.im.lineage.vo.TableColumn;
+import com.nomura.im.lineage.vo.FileColumn;
 
-	public void publishExcel(Workbook imLineageExcelWorkbook) {
-		try(FileOutputStream fileOut=new FileOutputStream("lineageData.xlsx")){
-			imLineageExcelWorkbook.write(fileOut);
-		} catch (Exception e){
-			e.printStackTrace();
+@Repository
+public class IMLineageDataDAO {
+
+	@Autowired
+	private JdbcTemplate jdbcTemplate;
+
+
+	public List<Table> getLineageDataFromDB() {
+		List<Table> lineageData = new ArrayList<>();
+		String dbTableQuery="SELECT db_table_id,database_name,db_table_name FROM dbo.lineage_data_db_tables";
+		List<Table> dbTables=jdbcTemplate.query(dbTableQuery,new RowMapper<Table>(){
+			@Override
+			public Table mapRow(ResultSet rs,int rowNum) throws SQLException{
+				Table table= new Table(
+						rs.getString("db_table_id"),
+						rs.getString("database_name"),
+						rs.getString("db_table_name"),
+						new ArrayList<>()
+				);
+				return table;
+			}
+		});
+
+		for(Table dbTable:dbTables) {
+			String tableColumnQuery = "SELECT db_column_id,db_column_name,process_name FROM dbo.lineage_data_db_table_columns WHERE db_table_id=?";
+			List<TableColumn> tableColumns = jdbcTemplate.query(tableColumnQuery,new Object[]{dbTable.tableId()},  new RowMapper<TableColumn>() {
+
+				@Override
+				public TableColumn mapRow(ResultSet rs, int rowNum) throws SQLException {
+					TableColumn tableColumn= new TableColumn(
+							rs.getString("db_column_id"),
+							rs.getString("db_column_name"),
+							rs.getString("process_name"),
+							new ArrayList<>()
+					);
+					return tableColumn;
+				}
+			});
+
+
+			for (TableColumn tableColumn : tableColumns) {
+				String fileColumnQuery = "SELECT file_column_name,file_name,file_source FROM dbo.lineage_data_file_columns WHERE db_column_id=?";
+				List<FileColumn> fileColumns = jdbcTemplate.query(fileColumnQuery,new Object[]{tableColumn.columnId()}, new RowMapper<FileColumn>() {
+					@Override
+					public FileColumn mapRow(ResultSet rs, int rowNum) throws SQLException {
+						FileColumn fileColumn= new FileColumn(
+								rs.getString("file_column_name"),
+								rs.getString("file_name"),
+								rs.getString("file_source")
+						);
+						return fileColumn;
+					}
+				});
+
+				tableColumn.fileColumns().addAll(fileColumns);
+			}
+			dbTable.tableColumns().addAll(tableColumns);
 		}
-	}
-	
-	public void publishJson(String imLineageData) {
-		
+		lineageData.addAll(dbTables);
+
+		//TODO: IMPLEMENT YOUR CODE HERE
+		return lineageData;
 	}
 }
 
 
 
+
+
+
+
+
+
 package com.nomura.im.lineage.service;
 
-import org.apache.poi.ss.usermodel.Workbook;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.Mockito;
-import org.mockito.junit.jupiter.MockitoExtension;
+public interface IMLineageGeneratorService {
 
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-
-import static org.mockito.Mockito.*;
-
-@ExtendWith(MockitoExtension.class)
-class LineagePublisherServiceTest {
-
-    @Mock
-    private Workbook mockWorkbook;
-
-    @Mock
-    FileOutputStream mockFileOut;
-
-    @InjectMocks
-    private LineagePublisherService lineagePublisherService;
-
-    @Test
-    void testPublishExcel() throws Exception {
-        lineagePublisherService.publishExcel(mockWorkbook);
-
-        // Verify that the write method was called on the workbook
-        verify(mockWorkbook, times(1)).write(any(FileOutputStream.class));
-    }
-
-    @Test
-    void testPublishExcelException() throws Exception {
-        // Simulate an exception while writing the file
-        doThrow(new IOException("Write failed")).when(mockWorkbook).write(any(FileOutputStream.class));
-
-        lineagePublisherService.publishExcel(mockWorkbook);
-
-        // Verify that the write method was attempted despite the exception
-        verify(mockWorkbook, times(1)).write(any(FileOutputStream.class));
-    }
+	public void generateAndPublishLineageData();
+	
 }
