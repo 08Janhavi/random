@@ -1,5 +1,126 @@
-C:\Users\singhjan>echo %JAVA_HOME%
-C:\Program Files\Zulu\zulu-21\;
+import React, { useEffect, useState } from 'react';
+import './App.css';
 
-C:\Users\singhjan>echo %PATH%
-C:\Program Files\Zulu\zulu-21\bin\;C:\Program Files\Zulu\zulu-21-jre\bin;C:\Program Files\Zulu\zulu-21\;\bin;C:\Program Files\Zulu\zulu-8\bin\;C:\Program Files\Zulu\zulu-17\bin\;C:\Program Files (x86)\Common Files\Oracle\Java\javapath;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0\;C:\Program Files (x86)\Common Files\Hitachi ID\;C:\Program Files\Common Files\Hitachi ID\;C:\Program Files (x86)\Apache\Maven\bin;C:\Program Files\Java\jdk1.8.0_281;C:\Program Files (x86)\Enterprise Vault\EVClient\x64\;C:\Program Files (x86)\Zulu\zulu-8\bin\;C:\Users\singhjan\AppData\Local\Microsoft\WindowsApps;
+const App = () => {
+  const [data, setData] = useState({});
+
+  useEffect(() => {
+    // Replace with your API endpoint
+    fetch('/api/getData')
+      .then((response) => response.json())
+      .then((data) => {
+        const groupedData = groupByDbColumnName(data);
+        setData(groupedData);
+      })
+      .catch((error) => console.error('Error fetching data:', error));
+  }, []);
+
+  const groupByDbColumnName = (data) => {
+    const grouped = {};
+    data.forEach((row) => {
+      if (!grouped[row.dbColumnName]) {
+        grouped[row.dbColumnName] = [];
+      }
+      grouped[row.dbColumnName].push(row);
+    });
+    return grouped;
+  };
+
+  const handleDelete = (dbColumnName, index) => {
+    const newData = { ...data };
+    newData[dbColumnName].splice(index, 1);
+
+    // If no more file column rows exist, delete the whole entry
+    if (newData[dbColumnName].length === 0) {
+      delete newData[dbColumnName];
+    }
+
+    setData(newData);
+  };
+
+  const handleAddFileColumn = (dbColumnName) => {
+    const newData = { ...data };
+    newData[dbColumnName].push({
+      dbColumnName,
+      fileColumnName: '',
+      fileName: '',
+      fileSource: ''
+    });
+    setData(newData);
+  };
+
+  const handleAddDbColumn = () => {
+    const newDbColumnName = `DB${Object.keys(data).length + 1}`; // Create new db column name (this can be changed)
+    const newData = { ...data };
+
+    newData[newDbColumnName] = [
+      {
+        dbColumnName: newDbColumnName,
+        fileColumnName: '',
+        fileName: '',
+        fileSource: ''
+      }
+    ];
+
+    setData(newData);
+  };
+
+  return (
+    <div className="App">
+      <h1>Database File Details</h1>
+      <table>
+        <thead>
+          <tr>
+            <th>Db Column Name</th>
+            <th>File Column Name</th>
+            <th>File Name</th>
+            <th>File Source</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {Object.entries(data).map(([dbColumnName, rows], dbIndex) => (
+            <React.Fragment key={dbIndex}>
+              {rows.map((row, rowIndex) => (
+                <tr key={rowIndex}>
+                  {rowIndex === 0 && (
+                    <td rowSpan={rows.length}>{dbColumnName}</td>
+                  )}
+                  <td>{row.fileColumnName}</td>
+                  <td>{row.fileName}</td>
+                  <td>{row.fileSource}</td>
+                  <td>
+                    <button onClick={() => handleDelete(dbColumnName, rowIndex)}>
+                      Delete
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {/* Add File Column button after each set of file column details */}
+              <tr>
+                <td colSpan="5">
+                  <button
+                    onClick={() => handleAddFileColumn(dbColumnName)}
+                    className="add-file-btn"
+                  >
+                    Add File Column
+                  </button>
+                </td>
+              </tr>
+            </React.Fragment>
+          ))}
+          {/* Add New DB Column button at the end of all rows */}
+          <tr>
+            <td colSpan="5">
+              <button onClick={handleAddDbColumn} className="add-db-btn">
+                Add DB Column
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
+};
+
+export default App;
