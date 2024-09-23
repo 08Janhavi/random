@@ -1,102 +1,55 @@
-/* App.css */
-
-body {
-    font-family: Arial, sans-serif;
-    margin: 0;
-    padding: 0;
-    background-color: #f4f4f4;
-}
-
-h1 {
-    text-align: center;
-    color: #333;
-}
-
-#holder {
-    max-width: 800px;
-    margin: 20px auto;
-    padding: 20px;
-    background: white;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-    border-radius: 8px;
-}
-
-.header {
-    background: #007bff;
-    color: white;
-    padding: 10px;
-    text-align: center;
-    border-radius: 8px 8px 0 0;
-}
-
-.content-bottom {
-    margin-top: 20px;
-}
-
-.breadcrumb {
-    margin-bottom: 10px;
-}
-
-.table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-table {
-    width: 100%;
-    margin-top: 20px;
-    border: 1px solid #ddd;
-}
-
-th, td {
-    padding: 12px;
-    text-align: left;
-    border-bottom: 1px solid #ddd;
-}
-
-th {
-    background-color: #f2f2f2;
-}
-
-button {
-    padding: 10px 15px;
-    margin: 5px;
-    border: none;
-    border-radius: 5px;
-    cursor: pointer;
-    background-color: #007bff;
-    color: white;
-}
-
-button:hover {
-    background-color: #0056b3;
-}
-
-.add-file-btn,
-.add-db-btn {
-    background-color: #28a745;
-}
-
-.add-file-btn:hover,
-.add-db-btn:hover {
-    background-color: #218838;
-}
-
-.highlight {
-    background-color: #e9ecef;
-    padding: 10px;
-    border-radius: 5px;
-}
-
-input[type='text'] {
-    width: 100%;
-    padding: 8px;
-    margin: 5px 0 10px 0;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-}
-
+/* Styling for the label */
 label {
-    display: block;
-    margin: 10px 0;
+  display: block;
+  margin-bottom: 20px;
+  font-size: 16px;
+  font-weight: bold;
+  color: #333;
+}
+
+/* Styling for the select (drop-down) menus */
+select {
+  width: 100%;
+  padding: 10px;
+  font-size: 16px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  background-color: #f9f9f9;
+  margin-top: 5px;
+}
+
+/* Add hover effect on select */
+select:hover {
+  border-color: #888;
+  background-color: #fff;
+}
+
+/* Add focus effect on select */
+select:focus {
+  border-color: #0056b3;
+  outline: none;
+  box-shadow: 0 0 5px rgba(0, 86, 179, 0.5);
+}
+
+/* Styling for the entire form container (optional) */
+form {
+  max-width: 400px;
+  margin: 0 auto;
+  padding: 20px;
+  background-color: #f4f4f4;
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+/* Responsive design: for smaller screens */
+@media (max-width: 600px) {
+  select {
+    width: 100%;
+    font-size: 14px;
+  }
+
+  label {
+    font-size: 14px;
+  }
 }
