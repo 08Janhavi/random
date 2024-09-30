@@ -1,120 +1,128 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import { useNavigate } from 'react-router-dom';
+
 
 const ViewDataScreen = () => {
-    const [databaseName, setDatabaseName] = useState('');  // Selected database
-    const [dbTableName, setDbTableName] = useState('');    // Selected table
-    const [data, setData] = useState({});                  // Data fetched from the backend
-    const [loading, setLoading] = useState(false);         // Loading state
-    const [error, setError] = useState(null);              // Error state
+    const [databaseName, setDatabaseName] = useState('');
+    const [dbTableName, setDbTableName] = useState('');
+    const [data, setData] = useState([]);
+    const navigate = useNavigate();
 
-    // Fetch data when databaseName or dbTableName changes
     useEffect(() => {
         if (databaseName && dbTableName) {
-            fetchData(databaseName, dbTableName);
+            fetch(`http://localhost:8080/getColumnMappings?db=${databaseName}&table=${dbTableName}`)
+                .then((response) => response.json())
+                .then((data) => {
+                    const groupedData = groupByDbColumnName(data);
+                    setData(groupedData);
+                })
+                .catch((error) => console.error('Error fetching data:', error));
         }
     }, [databaseName, dbTableName]);
 
-    // Function to fetch data from the backend
-    const fetchData = async (database, table) => {
-        setLoading(true);
-        setError(null);
-
-        try {
-            // Replace with your actual API endpoint
-            const response = await axios.get(`/api/data?database=${database}&table=${table}`);
-            setData(response.data);  // Set the fetched data
-            setLoading(false);
-        } catch (err) {
-            setError('Failed to fetch data');
-            setLoading(false);
-        }
+    const groupByDbColumnName = (data) => {
+        const grouped = {};
+        data.forEach((row) => {
+            if (!grouped[row.db_column_name]) {
+                grouped[row.db_column_name] = [];
+            }
+            grouped[row.db_column_name].push(row);
+        });
+        return grouped;
     };
 
-    // Handle edit button click (placeholder function)
     const handleEdit = () => {
-        console.log('Edit button clicked');
+        navigate('/addEditDataScreen', { state: { databaseName, dbTableName } });
     };
 
-    // Handle close button click (placeholder function)
     const handleClose = () => {
-        console.log('Close button clicked');
+        window.close();
     };
 
     return (
         <>
-            <div className="container">
-                <div className="content">
-                    <div className="form-group">
-                        <label>
-                            Database Name:
-                            <select value={databaseName} onChange={(e) => setDatabaseName(e.target.value)}>
-                                <option value="">Select Database</option>
-                                <option value="rawdata">rawdata</option>
-                                <option value="DB2">DB2</option>
-                                <option value="DB3">DB3</option>
-                            </select>
-                        </label>
-                        <label>
-                            DB Table Name:
-                            <select value={dbTableName} onChange={(e) => setDbTableName(e.target.value)}>
-                                <option value="">Select Table</option>
-                                <option value="dbo.lineage_data_db_tables">rawdata.dbo.lineage_data_db_tables</option>
-                                <option value="Table2">Table2</option>
-                                <option value="Table3">Table3</option>
-                            </select>
-                        </label>
-                    </div>
-                    <div className="highlight">
-                        {/* Show loading message */}
-                        {loading && <p>Loading data...</p>}
+            <div className="root">
+                <div className="main">
+                    <div id="holder">
+                        <div id="content-top">
+                            <div id="bannerContentSmall">
+                                <div className="header">
+                                    <div className="headerLeft"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="content-bottom">
+                            <div className="top-most-div">
+                                <div className="breadcrumb">
+                                    <span className="breadcrumbLeftInside">
+                                        <b>View Data Screen</b>
+                                    </span>
 
-                        {/* Show error message if any */}
-                        {error && <p>{error}</p>}
-
-                        {/* Show data when available */}
-                        {!loading && !error && Object.keys(data).length > 0 && (
-                            <table className="headTable">
-                                <tbody>
-                                    <tr>
-                                        <th>DB Column Name</th>
-                                        <th>File Column Name</th>
-                                        <th>File Name</th>
-                                        <th>File Source</th>
-                                    </tr>
-                                    {Object.entries(data).map(([db_column_name, rows], dbIndex) => (
-                                        <React.Fragment key={dbIndex}>
-                                            {rows.map((row, rowIndex) => (
-                                                <tr key={rowIndex}>
-                                                    {rowIndex === 0 && (
-                                                        <td rowSpan={rows.length} className='db-column-cell'>{db_column_name}</td>
-                                                    )}
-                                                    <td>{row.file_column_name}</td>
-                                                    <td>{row.file_name}</td>
-                                                    <td>{row.file_source}</td>
-                                                </tr>
+                                </div>
+                                <div className="dropdowns-container">
+                                    <label>
+                                        Database Name:
+                                        <select value={databaseName} onChange={(e) => setDatabaseName(e.target.value)}>
+                                            <option value="">Select Database</option>
+                                            <option value="rawdata">rawdata</option>
+                                            <option value="DB2">DB2</option>
+                                            <option value="DB3">DB3</option>
+                                        </select>
+                                    </label>
+                                    <label>
+                                        DB Table Name:
+                                        <select value={dbTableName} onChange={(e) => setDbTableName(e.target.value)}>
+                                            <option value="">Select Table</option>
+                                            <option value="dbo.lineage_data_db_tables">rawdata.dbo.lineage_data_db_tables</option>
+                                            <option value="Table2">Table2</option>
+                                            <option value="Table3">Table3</option>
+                                        </select>
+                                    </label>
+                                </div>
+                                <div className="highlight">
+                                    <table className="headTable">
+                                        <tbody>
+                                            <tr>
+                                                <th>DB Column Name</th>
+                                                <th>File Column Name</th>
+                                                <th>File Name</th>
+                                                <th>File Source</th>
+                                            </tr>
+                                            {Object.entries(data).map(([db_column_name, rows], dbIndex) => (
+                                                <React.Fragment key={dbIndex}>
+                                                    {rows.map((row, rowIndex) => (
+                                                        <tr key={rowIndex}>
+                                                            {rowIndex === 0 && (
+                                                                <td rowSpan={rows.length} className='db-column-cell'>{db_column_name}</td>
+                                                            )}
+                                                            <td>{row.file_column_name}</td>
+                                                            <td>{row.file_name}</td>
+                                                            <td>{row.file_source}</td>
+                                                        </tr>
+                                                    ))}
+                                                </React.Fragment>
                                             ))}
-                                        </React.Fragment>
-                                    ))}
-                                </tbody>
-                            </table>
-                        )}
+                                        </tbody>
 
-                        <table className="table-xml">
-                            <tbody>
-                                <tr>
-                                    <td>
-                                        <button onClick={handleEdit} className='btn edit-btn'>Edit</button>
-                                        <button onClick={handleClose} className='btn close-btn'>Close</button>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
+                                    </table>
+                                    <table className="table-xml">
+                                        <tbody>
+                                            <tr>
+                                                <td>
+                                                    <button onClick={handleEdit} className='btn edit-btn'>Edit</button>
+                                                    <button onClick={handleClose} className='btn close-btn'>Close</button>
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
         </>
-    );
+    )
 }
 
 export default ViewDataScreen;
