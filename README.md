@@ -1,144 +1,77 @@
-import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+package com.nomura.im.lineage.dao;
 
-const ViewDataScreen = () => {
-    const [databaseName, setDatabaseName] = useState('');
-    const [dbTableName, setDbTableName] = useState('');
-    const [data, setData] = useState([]);
-    const navigate = useNavigate();
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
 
-    useEffect(() => {
-        if (databaseName && dbTableName) {
-            fetch(`http://localhost:8080/getColumnMappings?db=${databaseName}&table=${dbTableName}`)
-                .then((response) => response.json())
-                .then((data) => {
-                    const structuredData = structureData(data);
-                    setData(structuredData);
-                })
-                .catch((error) => console.error('Error fetching data:', error));
-        }
-    }, [databaseName, dbTableName]);
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
+import org.springframework.stereotype.Repository;
 
-    const structureData = (data) => {
-        const result = [];
-        const table = data[0];
+import com.nomura.im.lineage.vo.Table;
+import com.nomura.im.lineage.vo.TableColumn;
+import com.nomura.im.lineage.vo.FileColumn;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
-        if (table && table.tableColumns) {
-            table.tableColumns.forEach((column) => {
-                const fileColumns = column.fileColumns.map(fileCol => ({
-                    file_column_name: fileCol.columnName,
-                    file_name: fileCol.fileName,
-                    file_source: fileCol.fileSource,
-                }));
-                result.push({
-                    db_column_name: column.columnName,
-                    rows: fileColumns,
-                });
-            });
-        }
-        return result;
-    };
+@Repository
+public class IMLineageDataDAO {
 
-    const handleEdit = (item) => {
-        navigate('/addEditDataScreen', {
-            state: {
-                databaseName, // The selected database name
-                dbTableName: item.db_column_name // Pass the db_column_name as needed
+    private static final Logger logger = LogManager.getLogger(IMLineageDataDAO.class.getName());
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    public List<Table> getLineageDataFromDB(String databaseName,String tableName) {
+        String query = "SELECT t.db_table_id,t.database_name,t.db_table_name, tc.db_column_id,tc.db_column_name,tc.process_name,fc.file_column_name,fc.file_name,fc.file_source FROM rawdata.dbo.lineage_data_db_tables t LEFT JOIN rawdata.dbo.lineage_data_db_table_columns tc ON t.db_table_id=tc.db_table_id LEFT JOIN rawdata.dbo.lineage_data_file_columns fc ON tc.db_column_id=fc.db_column_id ORDER BY t.db_table_name,tc.db_column_name";
+        logger.info("Executing query to retrieve lineage data : {}", query);
+        LineageDataRowMapper rowMapper = new LineageDataRowMapper();
+        jdbcTemplate.query(query, rowMapper);
+        return rowMapper.getLineageData();
+    }
+
+    private static class LineageDataRowMapper implements RowMapper<Table> {
+        private final List<Table> lineageData = new ArrayList<>();
+        private Table currentTable;
+        private TableColumn currentColumn;
+
+        @Override
+        public Table mapRow(ResultSet rs, int rowNum) throws SQLException {
+            String tableName = rs.getString("db_table_name");
+            logger.debug("Processing table : {}", tableName);
+
+            currentTable = lineageData.stream().filter(t -> t.tableName().equals(tableName)).findFirst().orElse(null);
+
+            if (currentTable == null) {
+                logger.info("Creating new table entry for table : {}", tableName);
+                currentTable = new Table(rs.getString("database_name"), rs.getString("db_table_name"), new ArrayList<>());
+                lineageData.add(currentTable);
             }
-        });
-    };
 
-    const handleClose = () => {
-        window.close();
-    };
+            String columnName = rs.getString("db_column_name");
+            logger.debug("Processing column : {}", columnName);
 
-    return (
-        <>
-            <div className="root">
-                <div className="main">
-                    <div id="holder">
-                        <div id="content-top">
-                            <div id="bannerContentSmall">
-                                <div className="header">
-                                    <div className="headerLeft"></div>
-                                </div>
-                            </div>
-                        </div>
-                        <div className="content-bottom">
-                            <div className="top-most-div">
-                                <div className="breadcrumb">
-                                    <span className="breadcrumbLeftInside">
-                                        <b>View Data Screen</b>
-                                    </span>
-                                </div>
-                                <div className="dropdowns-container">
-                                    <label>
-                                        Database Name:
-                                        <select value={databaseName} onChange={(e) => setDatabaseName(e.target.value)}>
-                                            <option value="">Select Database</option>
-                                            <option value="rawdata">rawdata</option>
-                                            <option value="DB2">DB2</option>
-                                            <option value="DB3">DB3</option>
-                                        </select>
-                                    </label>
-                                    <label>
-                                        DB Table Name:
-                                        <select value={dbTableName} onChange={(e) => setDbTableName(e.target.value)}>
-                                            <option value="">Select Table</option>
-                                            <option value="dbo.lineage_data_db_tables">rawdata.dbo.lineage_data_db_tables</option>
-                                            <option value="Table2">Table2</option>
-                                            <option value="Table3">Table3</option>
-                                        </select>
-                                    </label>
-                                </div>
-                                <div className="highlight">
-                                    <table className="headTable">
-                                        <tbody>
-                                            <tr>
-                                                <th>DB Column Name</th>
-                                                <th>File Column Name</th>
-                                                <th>File Name</th>
-                                                <th>File Source</th>
-                                                <th>Actions</th> {/* Added Actions column for Edit button */}
-                                            </tr>
-                                            {data.map((item, index) => (
-                                                <React.Fragment key={index}>
-                                                    {item.rows.map((row, rowIndex) => (
-                                                        <tr key={rowIndex}>
-                                                            {rowIndex === 0 && (
-                                                                <td rowSpan={item.rows.length} className='db-column-cell'>{item.db_column_name}</td>
-                                                            )}
-                                                            <td>{row.file_column_name}</td>
-                                                            <td>{row.file_name}</td>
-                                                            <td>{row.file_source}</td>
-                                                            {rowIndex === 0 && (
-                                                                <td rowSpan={item.rows.length}>
-                                                                    <button onClick={() => handleEdit(item)} className='btn edit-btn'>Edit</button>
-                                                                </td>
-                                                            )}
-                                                        </tr>
-                                                    ))}
-                                                </React.Fragment>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                    <table className="table-xml">
-                                        <tbody>
-                                            <tr>
-                                                <td>
-                                                    <button onClick={handleClose} className='btn close-btn'>Close</button>
-                                                </td>
-                                            </tr>
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </>
-    );
-};
+            currentColumn = currentTable.tableColumns().stream().filter(c -> c.columnName().equals(columnName)).findFirst().orElse(null);
 
-export default ViewDataScreen;
+            if (currentColumn == null) {
+                logger.info("Creating new column entry for column : {}", columnName);
+                currentColumn = new TableColumn(rs.getString("db_column_name"), rs.getString("process_name"), new ArrayList<>());
+                currentTable.tableColumns().add(currentColumn);
+            }
+
+            if (rs.getString("file_column_name") != null) {
+                String fileColumnName = rs.getString("file_column_name");
+                logger.debug("Processing file column : {}", fileColumnName);
+                FileColumn fileColumn = new FileColumn(rs.getString("file_column_name"), rs.getString("file_name"), rs.getString("file_source"));
+                currentColumn.fileColumns().add(fileColumn);
+            }
+            return null;
+        }
+
+        public List<Table> getLineageData() {
+            System.out.println(lineageData);
+            return lineageData;
+        }
+    }
+}
