@@ -1,178 +1,151 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 
-const ViewDataScreen = () => {
-  const [databaseName, setDatabaseName] = useState(() => {
-    return localStorage.getItem('databaseName') || '';
-  });
-  const [dbTableName, setDbTableName] = useState(() => {
-    return localStorage.getItem('dbTableName') || '';
-  });
-  const [data, setData] = useState([]);
+const AddEditDataScreen = () => {
+  const location = useLocation();
   const navigate = useNavigate();
 
-  useEffect(() => {
-    localStorage.setItem('databaseName', databaseName);
-  }, [databaseName]);
+  const { databaseName, dbTableName, db_column_name, row } = location.state || {};
 
-  useEffect(() => {
-    localStorage.setItem('dbTableName', dbTableName);
-  }, [dbTableName]);
+  const [formData, setFormData] = useState({
+    db_column_name: db_column_name || '',
+    file_column_name: row?.file_column_name || '',
+    file_name: row?.file_name || '',
+    file_source: row?.file_source || '',
+  });
 
-  useEffect(() => {
-    console.log(databaseName, dbTableName);
-    if (databaseName && dbTableName) {
-      fetch(
-        `http://localhost:8080/getColumnMappings?db=${databaseName}&table=${dbTableName}&_=${new Date().getTime()}`
-      )
-        .then((response) => response.json())
-        .then((data) => {
-          const structuredData = structureData(data);
-          setData(structuredData);
-        })
-        .catch((error) => console.error('Error fetching data:', error));
-    }
-  }, [databaseName, dbTableName]);
+  const handleSubmit = () => {
+    // Prepare data for submission
+    const submitData = {
+      databaseName,
+      dbTableName,
+      db_column_name: formData.db_column_name,
+      file_column_name: formData.file_column_name,
+      file_name: formData.file_name,
+      file_source: formData.file_source,
+    };
 
-  const structureData = (data) => {
-    const result = [];
-    const table = data[0];
-
-    if (table && table.tableColumns) {
-      table.tableColumns.forEach((column) => {
-        const fileColumns = column.fileColumns.map((fileCol) => ({
-          file_column_name: fileCol.columnName,
-          file_name: fileCol.fileName,
-          file_source: fileCol.fileSource,
-        }));
-        result.push({
-          db_column_name: column.columnName,
-          rows: fileColumns,
-        });
-      });
-    }
-    return result;
+    // Send the updated data to the server
+    fetch(`http://localhost:8080/updateData`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(submitData),
+    })
+      .then((response) => response.json())
+      .then((result) => {
+        console.log('Data updated successfully:', result);
+        navigate(-1); // Navigate back after submission
+      })
+      .catch((error) => console.error('Error updating data:', error));
   };
 
-  const handleEdit = (db_column_name, row) => {
-    navigate('/addEditDataScreen', { state: { databaseName, dbTableName, db_column_name, row } });
-  };
-
-  const handleClose = () => {
-    window.close();
+  const handleCancel = () => {
+    navigate(-1); // Go back without saving
   };
 
   return (
-    <>
-      <div className="root">
-        <div className="main">
-          <div id="holder">
-            <div id="content-top">
-              <div id="bannerContentSmall">
-                <div className="header">
-                  <div className="headerLeft"></div>
-                </div>
+    <div className="root">
+      <div className="main">
+        <div id="holder">
+          <div id="content-top">
+            <div id="bannerContentSmall">
+              <div className="header">
+                <div className="headerLeft"></div>
               </div>
             </div>
-            <div className="content-bottom">
-              <div className="top-most-div">
-                <div className="breadcrumb">
-                  <span className="breadcrumbLeftInside">
-                    <b>View Data Screen</b>
-                  </span>
-                </div>
-                <div className="dropdowns-container">
-                  <label>
-                    Database Name:
-                    <select
-                      value={databaseName}
-                      onChange={(e) => setDatabaseName(e.target.value)}
-                    >
-                      <option value="">Select Database</option>
-                      <option value="rawdata">rawdata</option>
-                      <option value="DB2">DB2</option>
-                      <option value="DB3">DB3</option>
-                    </select>
-                  </label>
-                  <label>
-                    DB Table Name:
-                    <select
-                      value={dbTableName}
-                      onChange={(e) => setDbTableName(e.target.value)}
-                    >
-                      <option value="">Select Table</option>
-                      <option value="lineage_data_db_tables">
-                        lineage_data_db_tables
-                      </option>
-                      <option value="Table2">Table2</option>
-                      <option value="Table3">Table3</option>
-                    </select>
-                  </label>
-                </div>
-                <div className="highlight">
-                  <table className="headTable">
-                    <tbody>
-                      <tr>
-                        <th>DB Column Name</th>
-                        <th>File Column Name</th>
-                        <th>File Name</th>
-                        <th>File Source</th>
-                        <th>Actions</th>
-                      </tr>
-                      {data.map((item, index) => (
-                        <React.Fragment key={index}>
-                          {item.rows.map((row, rowIndex) => (
-                            <tr key={`${index}-${rowIndex}`}>
-                              {rowIndex === 0 && (
-                                <td
-                                  rowSpan={item.rows.length}
-                                  className="db-column-cell"
-                                >
-                                  {item.db_column_name}
-                                </td>
-                              )}
-                              <td>{row.file_column_name}</td>
-                              <td>{row.file_name}</td>
-                              <td>{row.file_source}</td>
-                              <td>
-                                <button
-                                  onClick={() =>
-                                    handleEdit(item.db_column_name, row)
-                                  }
-                                  className="btn edit-btn"
-                                >
-                                  Edit
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </React.Fragment>
-                      ))}
-                    </tbody>
-                  </table>
-                  <table className="table-xml">
-                    <tbody>
-                      <tr>
-                        <td>
-                          {/* Remove the overall Edit button */}
-                          <button
-                            onClick={handleClose}
-                            className="btn close-btn"
-                          >
-                            Close
-                          </button>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
+          </div>
+          <div className="content-bottom">
+            <div className="top-most-div">
+              <div className="breadcrumb">
+                <span className="breadcrumbLeftInside">
+                  <b>Edit Data Screen</b>
+                </span>
+              </div>
+              <div className="highlight">
+                <table className="headTable">
+                  <tbody>
+                    <tr>
+                      <th>Db Column Name</th>
+                      <th>File Column Name</th>
+                      <th>File Name</th>
+                      <th>File Source</th>
+                    </tr>
+                    <tr>
+                      <td>
+                        <input
+                          type="text"
+                          value={formData.db_column_name}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              db_column_name: e.target.value,
+                            })
+                          }
+                          disabled // Disable editing of db_column_name
+                        />
+                      </td>
+                      <td>
+                        <input
+                          type="text"
+                          value={formData.file_column_name}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              file_column_name: e.target.value,
+                            })
+                          }
+                        />
+                      </td>
+                      <td>
+                        <input
+                          type="text"
+                          value={formData.file_name}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              file_name: e.target.value,
+                            })
+                          }
+                        />
+                      </td>
+                      <td>
+                        <input
+                          type="text"
+                          value={formData.file_source}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              file_source: e.target.value,
+                            })
+                          }
+                        />
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+                <table className="table-xml">
+                  <tbody>
+                    <tr>
+                      <td>
+                        <button onClick={handleSubmit} className="btn submit-btn">
+                          Submit
+                        </button>
+                        <button onClick={handleCancel} className="btn cancel-btn">
+                          Cancel
+                        </button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
         </div>
       </div>
-    </>
+    </div>
   );
 };
 
-export default ViewDataScreen;
+export default AddEditDataScreen;
