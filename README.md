@@ -70,7 +70,7 @@ const AddEditDataScreen = () => {
 
     return (
         <div>
-            <h2>Edit Data for {dbColumnName}</h2>
+            <h2>Edit Data for {dbColumnName || 'New DB Column'}</h2>
             <table>
                 <thead>
                     <tr>
