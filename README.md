@@ -5,39 +5,37 @@ const AddEditDataScreen = () => {
     const location = useLocation();
     const navigate = useNavigate();
 
-    // Extract db_column_name and row from location.state
+    // Extract db_column_name, rows, etc. from location.state or set empty defaults
     const { db_column_name = '', row = [] } = location.state || {};
 
-    const [data, setData] = useState({});  // Initialize data as an empty object
+    const [data, setData] = useState({});  // Initialize as an object to group by db_column_name
 
-    // Load data into the state if available (Ensure all fields are populated)
+    // Load data into the state if available
     useEffect(() => {
         if (location.state) {
             setData((prevData) => ({
                 ...prevData,
-                [db_column_name]: row.length
-                    ? row // If rows exist, use them
-                    : [{
-                        db_column_name,
-                        file_column_name: '',
-                        file_name: '',
-                        file_source: '',
-                    }],
+                [db_column_name]: row.length ? row : [{
+                    db_column_name,
+                    file_column_name: '',
+                    file_name: '',
+                    file_source: '',
+                }],
             }));
         }
     }, [location.state, db_column_name, row]);
 
-    // Handle deletion of a row under a specific dbColumnName
+    // Function to handle deletion of a row
     const handleDelete = (dbColumnName, index) => {
         const newData = { ...data };
-        newData[dbColumnName].splice(index, 1);  // Remove the row at the given index
+        newData[dbColumnName].splice(index, 1);  // Remove the selected row
         if (newData[dbColumnName].length === 0) {
-            delete newData[dbColumnName];  // Delete the key if no rows left
+            delete newData[dbColumnName];  // Remove key if no rows left
         }
         setData(newData);  // Update state
     };
 
-    // Add a blank file column under a specific db_column_name
+    // Function to add a blank file column for the specific DB column
     const handleAddFileColumn = (dbColumnName) => {
         const newData = { ...data };
         if (!newData[dbColumnName]) {
@@ -47,13 +45,13 @@ const AddEditDataScreen = () => {
             db_column_name: dbColumnName,
             file_column_name: '',
             file_name: '',
-            file_source: '',
+            file_source: ''
         };
-        newData[dbColumnName].push(newRow);
+        newData[dbColumnName].push(newRow);  // Add the new blank row
         setData(newData);  // Update state
     };
 
-    // Add a new DB column with empty file columns
+    // Function to add a new DB column
     const handleAddDbColumn = () => {
         const newDbColumnName = `DB_${Object.keys(data).length + 1}`;
         const newData = { ...data };
@@ -61,13 +59,14 @@ const AddEditDataScreen = () => {
             db_column_name: newDbColumnName,
             file_column_name: '',
             file_name: '',
-            file_source: '',
+            file_source: ''
         }];
         setData(newData);  // Update state
     };
 
     // Handle form submission
     const handleSubmit = () => {
+        // Prepare data for submission
         const submitData = [];
         for (const dbColumnName in data) {
             submitData.push(...data[dbColumnName]);  // Collect all rows
