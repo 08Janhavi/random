@@ -8,23 +8,20 @@ const AddEditDataScreen = () => {
     // Extract db_column_name, rows, etc. from location.state or set empty defaults
     const { db_column_name = '', row = [] } = location.state || {};
     
-    const [data, setData] = useState([]);  // Initialize with empty array
-    const [formData, setFormData] = useState({
-        db_column_name: db_column_name || '',
-        file_column_name: row?.file_column_name || '',
-        file_name: row?.file_name || '',
-        file_source: row?.file_source || '',
-    });
+    const [data, setData] = useState({});  // Initialize as an object to group by db_column_name
 
-    // Initial load of existing data
+    // Load data into the state if available
     useEffect(() => {
         if (location.state) {
-            setData([{
-                db_column_name,
-                file_column_name: row?.file_column_name || '',
-                file_name: row?.file_name || '',
-                file_source: row?.file_source || '',
-            }]);
+            setData((prevData) => ({
+                ...prevData,
+                [db_column_name]: row.length ? row : [{
+                    db_column_name,
+                    file_column_name: '',
+                    file_name: '',
+                    file_source: '',
+                }],
+            }));
         }
     }, [location.state, db_column_name, row]);
 
@@ -40,33 +37,40 @@ const AddEditDataScreen = () => {
 
     // Function to add a blank file column for the specific DB column
     const handleAddFileColumn = (dbColumnName) => {
-        const newData = [...data];
+        const newData = { ...data };
+        if (!newData[dbColumnName]) {
+            newData[dbColumnName] = [];
+        }
         const newRow = {
-            db_column_name: dbColumnName,  // Only keep the DB column name
+            db_column_name: dbColumnName,  // Keep the DB column name
             file_column_name: '',
             file_name: '',
             file_source: ''
         };
-        setData([...newData, newRow]);  // Add the new blank row
+        newData[dbColumnName].push(newRow);  // Add the new blank row
+        setData(newData);  // Update state
     };
 
     // Function to add a new DB column
     const handleAddDbColumn = () => {
         const newDbColumnName = `DB_${Object.keys(data).length + 1}`;
-        const newData = [...data];
-        const newRow = {
+        const newData = { ...data };
+        newData[newDbColumnName] = [{
             db_column_name: newDbColumnName,
             file_column_name: '',
             file_name: '',
             file_source: ''
-        };
-        setData([...newData, newRow]);  // Add the new blank DB column row
+        }];
+        setData(newData);  // Update state
     };
 
     // Handle form submission
     const handleSubmit = () => {
         // Prepare data for submission
-        const submitData = [...data];  // Copy the data state
+        const submitData = [];
+        for (const dbColumnName in data) {
+            submitData.push(...data[dbColumnName]);  // Collect all rows
+        }
         fetch("http://localhost:8080/updateData", {
             method: 'POST',
             headers: {
@@ -115,68 +119,79 @@ const AddEditDataScreen = () => {
                                             <th>File Source</th>
                                             <th>Actions</th>
                                         </tr>
-                                        {data.map((row, index) => (
-                                            <React.Fragment key={index}>
-                                                <tr>
-                                                    <td>
-                                                        <input
-                                                            type="text"
-                                                            value={row.db_column_name}
-                                                            onChange={(e) =>
-                                                                setFormData({
-                                                                    ...formData,
-                                                                    db_column_name: e.target.value,
-                                                                })
-                                                            }
-                                                            disabled // Disable editing of db_column_name
-                                                        />
-                                                    </td>
-                                                    <td>
-                                                        <input
-                                                            type="text"
-                                                            value={row.file_column_name}
-                                                            onChange={(e) =>
-                                                                setFormData({
-                                                                    ...formData,
-                                                                    file_column_name: e.target.value,
-                                                                })
-                                                            }
-                                                        />
-                                                    </td>
-                                                    <td>
-                                                        <input
-                                                            type="text"
-                                                            value={row.file_name}
-                                                            onChange={(e) =>
-                                                                setFormData({
-                                                                    ...formData,
-                                                                    file_name: e.target.value,
-                                                                })
-                                                            }
-                                                        />
-                                                    </td>
-                                                    <td>
-                                                        <input
-                                                            type="text"
-                                                            value={row.file_source}
-                                                            onChange={(e) =>
-                                                                setFormData({
-                                                                    ...formData,
-                                                                    file_source: e.target.value,
-                                                                })
-                                                            }
-                                                        />
-                                                    </td>
-                                                    <td>
-                                                        <button onClick={() => handleDelete(row.db_column_name, index)}>
-                                                            Delete
-                                                        </button>
-                                                    </td>
-                                                </tr>
+                                        {Object.entries(data).map(([db_column_name, rows], dbIndex) => (
+                                            <React.Fragment key={dbIndex}>
+                                                {rows.map((row, rowIndex) => (
+                                                    <tr key={rowIndex}>
+                                                        <td>
+                                                            <input
+                                                                type="text"
+                                                                value={row.db_column_name}
+                                                                disabled // Disable editing of db_column_name
+                                                            />
+                                                        </td>
+                                                        <td>
+                                                            <input
+                                                                type="text"
+                                                                value={row.file_column_name}
+                                                                onChange={(e) => {
+                                                                    const updatedRows = [...rows];
+                                                                    updatedRows[rowIndex] = {
+                                                                        ...row,
+                                                                        file_column_name: e.target.value,
+                                                                    };
+                                                                    setData({
+                                                                        ...data,
+                                                                        [db_column_name]: updatedRows,
+                                                                    });
+                                                                }}
+                                                            />
+                                                        </td>
+                                                        <td>
+                                                            <input
+                                                                type="text"
+                                                                value={row.file_name}
+                                                                onChange={(e) => {
+                                                                    const updatedRows = [...rows];
+                                                                    updatedRows[rowIndex] = {
+                                                                        ...row,
+                                                                        file_name: e.target.value,
+                                                                    };
+                                                                    setData({
+                                                                        ...data,
+                                                                        [db_column_name]: updatedRows,
+                                                                    });
+                                                                }}
+                                                            />
+                                                        </td>
+                                                        <td>
+                                                            <input
+                                                                type="text"
+                                                                value={row.file_source}
+                                                                onChange={(e) => {
+                                                                    const updatedRows = [...rows];
+                                                                    updatedRows[rowIndex] = {
+                                                                        ...row,
+                                                                        file_source: e.target.value,
+                                                                    };
+                                                                    setData({
+                                                                        ...data,
+                                                                        [db_column_name]: updatedRows,
+                                                                    });
+                                                                }}
+                                                            />
+                                                        </td>
+                                                        <td>
+                                                            <button onClick={() => handleDelete(db_column_name, rowIndex)}>
+                                                                Delete
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                ))}
                                                 <tr>
                                                     <td colSpan="5">
                                                         <button
-                                                            onClick={() => handleAddFileColumn(row.db_column_name)}
+                                                            onClick={() => handleAddFileColumn(db_column_name)}
                                                             className="add-file-btn"
                                                         >
                                                             Add File Column
