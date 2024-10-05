@@ -9,31 +9,29 @@ const AddEditDataScreen = () => {
     const { db_column_name = '', row = [] } = location.state || {};
 
     // Initialize formData with the correct structure
-    const [formData, setFormData] = useState([{
-        db_column_name: db_column_name || '',
-        file_column_name: row?.file_column_name || '',
-        file_name: row?.file_name || '',
-        file_source: row?.file_source || '',
-    }]);
+    const [formData, setFormData] = useState([
+        {
+            db_column_name: db_column_name || '',
+            file_columns: [{ file_column_name: row?.file_column_name || '', file_name: row?.file_name || '', file_source: row?.file_source || '' }],
+        }
+    ]);
 
     // Load data into formData when the component mounts or when location state changes
     useEffect(() => {
         if (location.state) {
             setFormData([{
                 db_column_name: db_column_name || '',
-                file_column_name: row?.file_column_name || '',
-                file_name: row?.file_name || '',
-                file_source: row?.file_source || '',
+                file_columns: [{ file_column_name: row?.file_column_name || '', file_name: row?.file_name || '', file_source: row?.file_source || '' }],
             }]);
         }
     }, [location.state, db_column_name, row]);
 
     // Function to handle form input changes
-    const handleInputChange = (index, e) => {
+    const handleInputChange = (dbIndex, fileIndex, e) => {
         const { name, value } = e.target;
         const updatedFormData = [...formData];
-        updatedFormData[index] = {
-            ...updatedFormData[index],
+        updatedFormData[dbIndex].file_columns[fileIndex] = {
+            ...updatedFormData[dbIndex].file_columns[fileIndex],
             [name]: value,
         };
         setFormData(updatedFormData);
@@ -56,37 +54,39 @@ const AddEditDataScreen = () => {
             .catch((error) => console.error('Error updating data:', error));
     };
 
-    // Function to handle adding a new file column (row) to the form
-    const handleAddFileColumn = () => {
-        setFormData((prevFormData) => [
-            ...prevFormData,
-            {
-                db_column_name: db_column_name || '',
-                file_column_name: '',
-                file_name: '',
-                file_source: '',
-            }
-        ]);
-    };
-
-    // Function to handle adding a new DB column (a new form row)
-    const handleAddDbColumn = () => {
-        const newDbColumnName = `DB_${formData.length + 1}`;
-        setFormData((prevFormData) => [
-            ...prevFormData,
-            {
-                db_column_name: newDbColumnName,
-                file_column_name: '',
-                file_name: '',
-                file_source: '',
-            }
-        ]);
-    };
-
-    // Function to handle deleting a row
-    const handleDelete = (index) => {
+    // Function to handle adding a new file column to the existing DB column
+    const handleAddFileColumn = (dbIndex) => {
         const updatedFormData = [...formData];
-        updatedFormData.splice(index, 1);  // Remove the selected row
+        updatedFormData[dbIndex].file_columns.push({
+            file_column_name: '',
+            file_name: '',
+            file_source: ''
+        });
+        setFormData(updatedFormData);
+    };
+
+    // Function to handle adding a new DB column with empty file columns
+    const handleAddDbColumn = () => {
+        setFormData((prevFormData) => [
+            ...prevFormData,
+            {
+                db_column_name: `DB_${prevFormData.length + 1}`,
+                file_columns: [{ file_column_name: '', file_name: '', file_source: '' }]
+            }
+        ]);
+    };
+
+    // Function to handle deleting a row (either DB or File column)
+    const handleDeleteFileColumn = (dbIndex, fileIndex) => {
+        const updatedFormData = [...formData];
+        updatedFormData[dbIndex].file_columns.splice(fileIndex, 1);  // Remove the selected file column
+        setFormData(updatedFormData);
+    };
+
+    // Function to delete a DB column and all its file columns
+    const handleDeleteDbColumn = (dbIndex) => {
+        const updatedFormData = [...formData];
+        updatedFormData.splice(dbIndex, 1);  // Remove the selected DB column
         setFormData(updatedFormData);
     };
 
@@ -116,72 +116,72 @@ const AddEditDataScreen = () => {
                             <div className="highlight">
                                 <table className="headTable">
                                     <tbody>
-                                        <tr>
-                                            <th>Db Column Name</th>
-                                            <th>File Column Name</th>
-                                            <th>File Name</th>
-                                            <th>File Source</th>
-                                            <th>Actions</th>
-                                        </tr>
-                                        {formData.map((row, index) => (
-                                            <tr key={index}>
-                                                <td>
-                                                    <input
-                                                        type="text"
-                                                        name="db_column_name"
-                                                        value={row.db_column_name}
-                                                        onChange={(e) => handleInputChange(index, e)}
-                                                        disabled // Disable editing of db_column_name
-                                                    />
-                                                </td>
-                                                <td>
-                                                    <input
-                                                        type="text"
-                                                        name="file_column_name"
-                                                        value={row.file_column_name}
-                                                        onChange={(e) => handleInputChange(index, e)}
-                                                    />
-                                                </td>
-                                                <td>
-                                                    <input
-                                                        type="text"
-                                                        name="file_name"
-                                                        value={row.file_name}
-                                                        onChange={(e) => handleInputChange(index, e)}
-                                                    />
-                                                </td>
-                                                <td>
-                                                    <input
-                                                        type="text"
-                                                        name="file_source"
-                                                        value={row.file_source}
-                                                        onChange={(e) => handleInputChange(index, e)}
-                                                    />
-                                                </td>
-                                                <td>
-                                                    <button onClick={() => handleDelete(index)}>
-                                                        Delete
-                                                    </button>
-                                                </td>
-                                            </tr>
+                                        {formData.map((dbRow, dbIndex) => (
+                                            <React.Fragment key={dbIndex}>
+                                                <tr>
+                                                    <th>Db Column Name</th>
+                                                    <th>File Column Name</th>
+                                                    <th>File Name</th>
+                                                    <th>File Source</th>
+                                                    <th>Actions</th>
+                                                </tr>
+                                                {dbRow.file_columns.map((fileRow, fileIndex) => (
+                                                    <tr key={fileIndex}>
+                                                        <td>
+                                                            <input
+                                                                type="text"
+                                                                name="db_column_name"
+                                                                value={dbRow.db_column_name}
+                                                                disabled // Disable editing of db_column_name
+                                                            />
+                                                        </td>
+                                                        <td>
+                                                            <input
+                                                                type="text"
+                                                                name="file_column_name"
+                                                                value={fileRow.file_column_name}
+                                                                onChange={(e) => handleInputChange(dbIndex, fileIndex, e)}
+                                                            />
+                                                        </td>
+                                                        <td>
+                                                            <input
+                                                                type="text"
+                                                                name="file_name"
+                                                                value={fileRow.file_name}
+                                                                onChange={(e) => handleInputChange(dbIndex, fileIndex, e)}
+                                                            />
+                                                        </td>
+                                                        <td>
+                                                            <input
+                                                                type="text"
+                                                                name="file_source"
+                                                                value={fileRow.file_source}
+                                                                onChange={(e) => handleInputChange(dbIndex, fileIndex, e)}
+                                                            />
+                                                        </td>
+                                                        <td>
+                                                            <button onClick={() => handleDeleteFileColumn(dbIndex, fileIndex)}>
+                                                                Delete File Column
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                                <tr>
+                                                    <td colSpan="5">
+                                                        <button onClick={() => handleAddFileColumn(dbIndex)} className="add-file-btn">
+                                                            Add File Column to {dbRow.db_column_name}
+                                                        </button>
+                                                        <button onClick={() => handleDeleteDbColumn(dbIndex)} className="delete-db-btn">
+                                                            Delete {dbRow.db_column_name}
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            </React.Fragment>
                                         ))}
                                         <tr>
                                             <td colSpan="5">
-                                                <button
-                                                    onClick={handleAddFileColumn}
-                                                    className="add-file-btn"
-                                                >
-                                                    Add File Column
-                                                </button>
-                                            </td>
-                                        </tr>
-                                        <tr>
-                                            <td colSpan="5">
-                                                <button
-                                                    onClick={handleAddDbColumn}
-                                                    className="add-db-btn"
-                                                >
-                                                    Add DB Column
+                                                <button onClick={handleAddDbColumn} className="add-db-btn">
+                                                    Add New DB Column
                                                 </button>
                                             </td>
                                         </tr>
