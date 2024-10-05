@@ -1,21 +1,58 @@
-
-
 @Repository
 public class IMLineageDataDAO {
 
     private static final Logger logger = LogManager.getLogger(IMLineageDataDAO.class.getName());
+
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
-    public List<Table> getLineageDataFromDB(String databaseName,String tableName) {
-        String query = String.format("SELECT t.db_table_id,t.database_name,t.db_table_name, tc.db_column_id,tc.db_column_name,tc.process_name,fc.file_column_name,fc.file_name,fc.file_source FROM %s.dbo.%s t LEFT JOIN %s.dbo.lineage_data_db_table_columns tc ON t.db_table_id=tc.db_table_id LEFT JOIN %s.dbo.lineage_data_file_columns fc ON tc.db_column_id=fc.db_column_id ORDER BY t.db_table_name,tc.db_column_name",databaseName,tableName,databaseName,databaseName);
+    // Existing method for fetching lineage data
+    public List<Table> getLineageDataFromDB(String databaseName, String tableName) {
+        String query = String.format(
+                "SELECT t.db_table_id, t.database_name, t.db_table_name, tc.db_column_id, tc.db_column_name, tc.process_name, " +
+                        "fc.file_column_name, fc.file_name, fc.file_source " +
+                        "FROM %s.dbo.%s t " +
+                        "LEFT JOIN %s.dbo.lineage_data_db_table_columns tc ON t.db_table_id = tc.db_table_id " +
+                        "LEFT JOIN %s.dbo.lineage_data_file_columns fc ON tc.db_column_id = fc.db_column_id " +
+                        "ORDER BY t.db_table_name, tc.db_column_name", databaseName, tableName, databaseName, databaseName);
         logger.info("Executing query to retrieve lineage data : {}", query);
         LineageDataRowMapper rowMapper = new LineageDataRowMapper();
-        jdbcTemplate.query(query,rowMapper);
-//        System.out.println("js",rowMapper.getLineageData());
+        jdbcTemplate.query(query, rowMapper);
         return rowMapper.getLineageData();
     }
 
+    // New method for saving lineage data
+    public void saveLineageData(Table table) {
+        logger.info("Saving lineage data for table : {}", table.tableName());
+
+        // Save the table (insert or update)
+        String saveTableQuery = "INSERT INTO lineage_data_db_table (database_name, db_table_name) VALUES (?, ?) " +
+                                "ON DUPLICATE KEY UPDATE db_table_name = ?";
+        jdbcTemplate.update(saveTableQuery, table.databaseName(), table.tableName(), table.tableName());
+
+        // Save the table columns
+        for (TableColumn column : table.tableColumns()) {
+            logger.info("Saving column: {}", column.columnName());
+
+            String saveColumnQuery = "INSERT INTO lineage_data_db_table_columns (db_table_id, db_column_name, process_name) " +
+                                     "VALUES ((SELECT db_table_id FROM lineage_data_db_table WHERE db_table_name = ?), ?, ?) " +
+                                     "ON DUPLICATE KEY UPDATE db_column_name = ?, process_name = ?";
+            jdbcTemplate.update(saveColumnQuery, table.tableName(), column.columnName(), column.processName(), column.columnName(), column.processName());
+
+            // Save the file columns
+            for (FileColumn fileColumn : column.fileColumns()) {
+                logger.info("Saving file column: {}", fileColumn.columnName());
+
+                String saveFileColumnQuery = "INSERT INTO lineage_data_file_columns (db_column_id, file_column_name, file_name, file_source) " +
+                                             "VALUES ((SELECT db_column_id FROM lineage_data_db_table_columns WHERE db_column_name = ?), ?, ?, ?) " +
+                                             "ON DUPLICATE KEY UPDATE file_column_name = ?, file_name = ?, file_source = ?";
+                jdbcTemplate.update(saveFileColumnQuery, column.columnName(), fileColumn.columnName(), fileColumn.fileName(), fileColumn.fileSource(),
+                        fileColumn.columnName(), fileColumn.fileName(), fileColumn.fileSource());
+            }
+        }
+    }
+
+    // Existing method for mapping data from the DB
     private static class LineageDataRowMapper implements RowMapper<Table> {
         private final List<Table> lineageData = new ArrayList<>();
         private Table currentTable;
@@ -27,7 +64,6 @@ public class IMLineageDataDAO {
             logger.debug("Processing table : {}", tableName);
 
             currentTable = lineageData.stream().filter(t -> t.tableName().equals(tableName)).findFirst().orElse(null);
-
             if (currentTable == null) {
                 logger.info("Creating new table entry for table : {}", tableName);
                 currentTable = new Table(rs.getString("database_name"), rs.getString("db_table_name"), new ArrayList<>());
@@ -38,7 +74,6 @@ public class IMLineageDataDAO {
             logger.debug("Processing column : {}", columnName);
 
             currentColumn = currentTable.tableColumns().stream().filter(c -> c.columnName().equals(columnName)).findFirst().orElse(null);
-
             if (currentColumn == null) {
                 logger.info("Creating new column entry for column : {}", columnName);
                 currentColumn = new TableColumn(rs.getString("db_column_name"), rs.getString("process_name"), new ArrayList<>());
@@ -51,18 +86,47 @@ public class IMLineageDataDAO {
                 FileColumn fileColumn = new FileColumn(rs.getString("file_column_name"), rs.getString("file_name"), rs.getString("file_source"));
                 currentColumn.fileColumns().add(fileColumn);
             }
+
             return null;
         }
 
         public List<Table> getLineageData() {
-            System.out.println(lineageData);
             return lineageData;
         }
-        
-        
-        
     }
 }
 
 
 
+
+
+
+@RestController
+@RequestMapping("/lineage")
+@CrossOrigin(origins = "http://localhost:5173")
+public class LineageDataController {
+
+    private static final Logger logger = LogManager.getLogger(LineageDataController.class.getName());
+
+    @Autowired
+    private IMLineageDataDAO lineageDataDAO;
+
+    // Existing GET method for fetching data
+    @GetMapping("/getColumnMappings")
+    public List<Table> getColumnMappings(@RequestParam("db") String db, @RequestParam("table") String table) {
+        if (db == null || table == null) return new ArrayList<>();
+        logger.info("Fetching lineage data");
+        return lineageDataDAO.getLineageDataFromDB(db, table);
+    }
+
+    // New POST method for saving data
+    @PostMapping("/saveColumnMappings")
+    public ResponseEntity<String> saveColumnMappings(@RequestBody Table table) {
+        if (table == null) return ResponseEntity.badRequest().body("Invalid data");
+
+        logger.info("Saving lineage data for table: " + table.tableName());
+        lineageDataDAO.saveLineageData(table);
+
+        return ResponseEntity.ok("Data saved successfully");
+    }
+}
