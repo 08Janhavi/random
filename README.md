@@ -1,64 +1,68 @@
+
+
 @Repository
 public class IMLineageDataDAO {
 
+    private static final Logger logger = LogManager.getLogger(IMLineageDataDAO.class.getName());
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
-    private static final Logger logger = LogManager.getLogger(IMLineageDataDAO.class.getName());
-
-    public List<Table> getLineageDataFromDB(String databaseName, String tableName) {
-        String query = String.format("SELECT ... FROM ... WHERE database_name = ? AND table_name = ?", databaseName, tableName);
-        logger.info("Executing query to retrieve lineage data: {}", query);
-
+    public List<Table> getLineageDataFromDB(String databaseName,String tableName) {
+        String query = String.format("SELECT t.db_table_id,t.database_name,t.db_table_name, tc.db_column_id,tc.db_column_name,tc.process_name,fc.file_column_name,fc.file_name,fc.file_source FROM %s.dbo.%s t LEFT JOIN %s.dbo.lineage_data_db_table_columns tc ON t.db_table_id=tc.db_table_id LEFT JOIN %s.dbo.lineage_data_file_columns fc ON tc.db_column_id=fc.db_column_id ORDER BY t.db_table_name,tc.db_column_name",databaseName,tableName,databaseName,databaseName);
+        logger.info("Executing query to retrieve lineage data : {}", query);
         LineageDataRowMapper rowMapper = new LineageDataRowMapper();
-        jdbcTemplate.query(query, rowMapper);
+        jdbcTemplate.query(query,rowMapper);
+//        System.out.println("js",rowMapper.getLineageData());
         return rowMapper.getLineageData();
     }
 
-    // Method to save or update data
-    public void saveOrUpdateLineageData(List<Table> tables) {
-        for (Table table : tables) {
-            // Check if table exists, if not, insert
-            String checkTableQuery = "SELECT COUNT(*) FROM lineage_table WHERE database_name = ? AND table_name = ?";
-            int tableCount = jdbcTemplate.queryForObject(checkTableQuery, Integer.class, table.databaseName(), table.tableName());
+    private static class LineageDataRowMapper implements RowMapper<Table> {
+        private final List<Table> lineageData = new ArrayList<>();
+        private Table currentTable;
+        private TableColumn currentColumn;
 
-            if (tableCount == 0) {
-                // Insert new table
-                String insertTableQuery = "INSERT INTO lineage_table (database_name, table_name) VALUES (?, ?)";
-                jdbcTemplate.update(insertTableQuery, table.databaseName(), table.tableName());
+        @Override
+        public Table mapRow(ResultSet rs, int rowNum) throws SQLException {
+            String tableName = rs.getString("db_table_name");
+            logger.debug("Processing table : {}", tableName);
+
+            currentTable = lineageData.stream().filter(t -> t.tableName().equals(tableName)).findFirst().orElse(null);
+
+            if (currentTable == null) {
+                logger.info("Creating new table entry for table : {}", tableName);
+                currentTable = new Table(rs.getString("database_name"), rs.getString("db_table_name"), new ArrayList<>());
+                lineageData.add(currentTable);
             }
 
-            for (TableColumn column : table.tableColumns()) {
-                // Insert or update columns
-                String checkColumnQuery = "SELECT COUNT(*) FROM lineage_column WHERE db_column_name = ? AND db_table_name = ?";
-                int columnCount = jdbcTemplate.queryForObject(checkColumnQuery, Integer.class, column.columnName(), table.tableName());
+            String columnName = rs.getString("db_column_name");
+            logger.debug("Processing column : {}", columnName);
 
-                if (columnCount == 0) {
-                    // Insert new column
-                    String insertColumnQuery = "INSERT INTO lineage_column (db_column_name, process_name, db_table_name) VALUES (?, ?, ?)";
-                    jdbcTemplate.update(insertColumnQuery, column.columnName(), column.processName(), table.tableName());
-                } else {
-                    // Update existing column
-                    String updateColumnQuery = "UPDATE lineage_column SET process_name = ? WHERE db_column_name = ? AND db_table_name = ?";
-                    jdbcTemplate.update(updateColumnQuery, column.processName(), column.columnName(), table.tableName());
-                }
+            currentColumn = currentTable.tableColumns().stream().filter(c -> c.columnName().equals(columnName)).findFirst().orElse(null);
 
-                // Handle file columns
-                for (FileColumn fileColumn : column.fileColumns()) {
-                    String checkFileColumnQuery = "SELECT COUNT(*) FROM file_column WHERE file_column_name = ? AND db_column_name = ?";
-                    int fileColumnCount = jdbcTemplate.queryForObject(checkFileColumnQuery, Integer.class, fileColumn.columnName(), column.columnName());
-
-                    if (fileColumnCount == 0) {
-                        // Insert new file column
-                        String insertFileColumnQuery = "INSERT INTO file_column (file_column_name, file_name, file_source, db_column_name) VALUES (?, ?, ?, ?)";
-                        jdbcTemplate.update(insertFileColumnQuery, fileColumn.columnName(), fileColumn.fileName(), fileColumn.fileSource(), column.columnName());
-                    } else {
-                        // Update existing file column
-                        String updateFileColumnQuery = "UPDATE file_column SET file_name = ?, file_source = ? WHERE file_column_name = ? AND db_column_name = ?";
-                        jdbcTemplate.update(updateFileColumnQuery, fileColumn.fileName(), fileColumn.fileSource(), fileColumn.columnName(), column.columnName());
-                    }
-                }
+            if (currentColumn == null) {
+                logger.info("Creating new column entry for column : {}", columnName);
+                currentColumn = new TableColumn(rs.getString("db_column_name"), rs.getString("process_name"), new ArrayList<>());
+                currentTable.tableColumns().add(currentColumn);
             }
+
+            if (rs.getString("file_column_name") != null) {
+                String fileColumnName = rs.getString("file_column_name");
+                logger.debug("Processing file column : {}", fileColumnName);
+                FileColumn fileColumn = new FileColumn(rs.getString("file_column_name"), rs.getString("file_name"), rs.getString("file_source"));
+                currentColumn.fileColumns().add(fileColumn);
+            }
+            return null;
         }
+
+        public List<Table> getLineageData() {
+            System.out.println(lineageData);
+            return lineageData;
+        }
+        
+        
+        
     }
 }
+
+
+
