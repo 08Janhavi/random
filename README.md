@@ -1,1 +1,1 @@
-2024-10-06 02:01:53 WARN  org.springframework.web.servlet.mvc.support.DefaultHandlerExceptionResolver - Resolved [org.springframework.http.converter.HttpMessageNotReadableException: JSON parse error: Cannot deserialize value of type `com.nomura.im.lineage.vo.Table` from Array value (token `JsonToken.START_ARRAY`)]
+hi [{"db_column_name":"dummy_db_col_1","file_columns":[{"file_column_name":"dummy_file_col_1","file_name":"dumy_file_1","file_source":"bbj"}]}]
