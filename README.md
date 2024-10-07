@@ -1,11 +1,31 @@
 // Function to handle deleting a row (either DB or File column)
 const handleDeleteFileColumn = (dbIndex, fileIndex) => {
-    const db_column_name = formData[dbIndex].db_column_name;
-    const file_column_name = formData[dbIndex].file_columns[fileIndex].file_column_name;
+    // Construct the payload similar to handleSubmit
+    const payload = {
+        databaseName,
+        tableName: dbTableName,
+        tableColumns: formData.map((dbRow, dbRowIndex) => ({
+            columnName: dbRow.db_column_name,
+            processName: processName,
+            fileColumns: dbRow.file_columns
+                .filter((_, i) => !(dbRowIndex === dbIndex && i === fileIndex)) // Exclude the file column being deleted
+                .map(fileColumn => ({
+                    columnName: fileColumn.file_column_name,
+                    fileName: fileColumn.file_name,
+                    fileSource: fileColumn.file_source
+                }))
+        })),
+    };
 
-    // Send a DELETE request to the backend
-    fetch(`http://localhost:8080/deleteFileColumn?db_column_name=${db_column_name}&file_column_name=${file_column_name}`, {
+    console.log("Delete payload", payload);
+
+    // Send a DELETE request with the updated payload
+    fetch(`http://localhost:8080/deleteFileColumn`, {
         method: 'DELETE',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
     })
     .then(response => {
         if (response.ok) {
