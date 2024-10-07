@@ -1,44 +1,82 @@
-// Function to handle deleting a row (either DB or File column)
-const handleDeleteFileColumn = (dbIndex, fileIndex) => {
-    // Construct the payload similar to handleSubmit
-    const payload = {
-        databaseName,
-        tableName: dbTableName,
-        tableColumns: formData.map((dbRow, dbRowIndex) => ({
-            columnName: dbRow.db_column_name,
-            processName: processName,
-            fileColumns: dbRow.file_columns
-                .filter((_, i) => !(dbRowIndex === dbIndex && i === fileIndex)) // Exclude the file column being deleted
-                .map(fileColumn => ({
-                    columnName: fileColumn.file_column_name,
-                    fileName: fileColumn.file_name,
-                    fileSource: fileColumn.file_source
-                }))
-        })),
-    };
+@RestController
+@RequestMapping
+@CrossOrigin(origins = "http://localhost:5173")
+public class LineageDataController {
 
-    console.log("Delete payload", payload);
+    @Autowired
+    private IMLineageDataDAO lineageDataDAO;
 
-    // Send a DELETE request with the updated payload
-    fetch(`http://localhost:8080/deleteFileColumn`, {
-        method: 'DELETE',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-    })
-    .then(response => {
-        if (response.ok) {
-            // Update the frontend only if the deletion was successful
-            const updatedFormData = [...formData];
-            updatedFormData[dbIndex].file_columns.splice(fileIndex, 1);  // Remove the selected file column
-            setFormData(updatedFormData);
-            console.log('File column deleted successfully.');
-        } else {
-            console.error('Failed to delete the file column.');
+    private static final Logger logger = LogManager.getLogger(LineageDataController.class.getName());
+
+    // New deleteFileColumn endpoint
+    @DeleteMapping("/deleteFileColumn")
+    public ResponseEntity<String> deleteFileColumn(@RequestBody Table table) {
+        logger.info("Received request to delete file column for table: {}", table.tableName());
+        
+        // Check if table or file columns are null
+        if (table == null || table.tableColumns() == null || table.tableColumns().isEmpty()) {
+            return ResponseEntity.badRequest().body("Invalid data");
         }
-    })
-    .catch(error => {
-        console.error('Error deleting file column:', error);
-    });
-};
+
+        // Delegate the delete operation to the DAO
+        try {
+            lineageDataDAO.deleteFileColumn(table);
+            return ResponseEntity.ok("File column deleted successfully");
+        } catch (Exception e) {
+            logger.error("Error occurred while deleting file column: ", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Failed to delete file column");
+        }
+    }
+}
+
+
+
+
+
+@Repository
+public class IMLineageDataDAO {
+
+    private static final Logger logger = LogManager.getLogger(IMLineageDataDAO.class.getName());
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    // New method to delete file column
+    public void deleteFileColumn(Table table) throws Exception {
+        logger.info("Deleting file column for table: {}", table.tableName());
+
+        // Step 1: Get the db_table_id from lineage_data_db_tables
+        String findTableQuery = "SELECT db_table_id FROM rawdata.dbo.lineage_data_db_tables WHERE database_name = ? AND db_table_name = ?";
+        String dbTableId = jdbcTemplate.queryForObject(findTableQuery, String.class, table.databaseName(), table.tableName());
+
+        if (dbTableId == null) {
+            throw new Exception("Table not found");
+        }
+
+        // Step 2: Iterate over each table column to find the associated db_column_id
+        for (TableColumn tableColumn : table.tableColumns()) {
+            logger.info("Processing column: {}", tableColumn.columnName());
+
+            // Get db_column_id for the current table column
+            String findColumnQuery = "SELECT db_column_id FROM rawdata.dbo.lineage_data_db_table_columns WHERE db_table_id = ? AND db_column_name = ?";
+            String dbColumnId = jdbcTemplate.queryForObject(findColumnQuery, String.class, dbTableId, tableColumn.columnName());
+
+            if (dbColumnId == null) {
+                throw new Exception("Column not found for column name: " + tableColumn.columnName());
+            }
+
+            // Step 3: Iterate over file columns to delete them
+            for (FileColumn fileColumn : tableColumn.fileColumns()) {
+                logger.info("Deleting file column: {}", fileColumn.columnName());
+
+                // Delete the file column from the lineage_data_file_columns table
+                String deleteFileColumnQuery = "DELETE FROM rawdata.dbo.lineage_data_file_columns WHERE db_column_id = ? AND file_column_name = ?";
+                int rowsAffected = jdbcTemplate.update(deleteFileColumnQuery, dbColumnId, fileColumn.columnName());
+
+                if (rowsAffected == 0) {
+                    throw new Exception("Failed to delete file column: " + fileColumn.columnName());
+                }
+            }
+        }
+    }
+}
