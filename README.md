@@ -1,229 +1,214 @@
+package com.nomura.im.lineage.controller;
+
+import com.nomura.im.lineage.dao.IMLineageDataDAO;
+import com.nomura.im.lineage.service.ExcelService;
+import com.nomura.im.lineage.vo.Table;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.ArrayList;
+import java.util.List;
+
+@RestController
+@RequestMapping
+@CrossOrigin(origins="http://localhost:5173")
+public class LineageDataController {
+
+    @Autowired
+    private IMLineageDataDAO lineageDataDAO;
+
+    private static final Logger logger = LogManager.getLogger(LineageDataController.class.getName());
+
+    @GetMapping("/getColumnMappings")
+    public List<Table> getColumnMappings(@RequestParam("db") String db, @RequestParam("table") String table){
+        if(db==null || table==null) return new ArrayList<>();
+        logger.info("data printed");
+        return lineageDataDAO.getLineageDataFromDB(db,table);
+    }
+
+
+    @PostMapping("/saveColumnMappings")
+    public ResponseEntity<String> saveColumnMappings(@RequestBody Table table) {
+        System.out.println("reached inside");
+        logger.info("hey im here");
+        if (table == null) return ResponseEntity.badRequest().body("Invalid data");
+
+        logger.info("updating lineage data " );
+        lineageDataDAO.saveLineageData(table);
+
+        return ResponseEntity.ok("Data saved successfully");
+    }
+}
 
 
 
 
 
 
-import React, { useEffect, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
 
-const AddEditDataScreen = () => {
-    const location = useLocation();
-    const navigate = useNavigate();
 
-    // Extract db_column_name, row, etc. from location.state or set empty defaults
-    const { databaseName, dbTableName,processName, db_column_name = '', row = [] } = location.state || {};
 
-    // Initialize formData with the correct structure
-    const [formData, setFormData] = useState([
-        {
-            db_column_name: db_column_name || '',
-            file_columns: [{ file_column_name: row?.file_column_name || '', file_name: row?.file_name || '', file_source: row?.file_source || '' }],
+
+package com.nomura.im.lineage.dao;
+
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
+import org.springframework.stereotype.Repository;
+
+import com.nomura.im.lineage.vo.Table;
+import com.nomura.im.lineage.vo.TableColumn;
+import com.nomura.im.lineage.vo.FileColumn;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+@Repository
+public class IMLineageDataDAO {
+
+    private static final Logger logger = LogManager.getLogger(IMLineageDataDAO.class.getName());
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    private static final String CREATED_BY="janhavi";
+
+    // Existing method for fetching lineage data
+    public List<Table> getLineageDataFromDB(String databaseName, String tableName) {
+        String query =
+                "SELECT t.db_table_id, t.database_name, t.db_table_name, tc.db_column_id, tc.db_column_name, tc.process_name, " +
+                        "fc.file_column_name, fc.file_name, fc.file_source " +
+                        "FROM rawdata.dbo.lineage_data_db_tables t " +
+                        "LEFT JOIN rawdata.dbo.lineage_data_db_table_columns tc ON t.db_table_id = tc.db_table_id " +
+                        "LEFT JOIN rawdata.dbo.lineage_data_file_columns fc ON tc.db_column_id = fc.db_column_id " +
+                        "WHERE  t.database_name=? AND t.db_table_name=?" +
+                        "ORDER BY t.db_table_name, tc.db_column_name";
+        logger.info("Executing query to retrieve lineage data : {}", query);
+        LineageDataRowMapper rowMapper = new LineageDataRowMapper();
+        jdbcTemplate.query(query, rowMapper,databaseName,tableName);
+        return rowMapper.getLineageData();
+    }
+
+    // New method for saving lineage data
+    public void saveLineageData(Table table) {
+        logger.info("Saving lineage data for table: {}", table.tableName());
+
+        // Step 1: Get the db_table_id from lineage_data_db_table
+        String findTableQuery = "SELECT db_table_id FROM rawdata.dbo.lineage_data_db_tables WHERE database_name = ? AND db_table_name = ?";
+        String dbTableId = jdbcTemplate.queryForObject(findTableQuery, String.class, table.databaseName(), table.tableName());
+
+        if (dbTableId == null) {
+            // Insert the new table if it doesn't exist
+            String insertTableQuery = "INSERT INTO rawdata.dbo.lineage_data_db_tables (database_name, db_table_name,created_by) VALUES (?, ?,?)";
+            jdbcTemplate.update(insertTableQuery, table.databaseName(), table.tableName(),CREATED_BY);
+
+            // Fetch the newly inserted db_table_id
+            dbTableId = jdbcTemplate.queryForObject(findTableQuery, String.class, table.databaseName(), table.tableName(),CREATED_BY);
         }
-    ]);
 
-    // Load data into formData when the component mounts or when location state changes
-    useEffect(() => {
-        if (location.state) {
-            setFormData([{
-                db_column_name: db_column_name || '',
-                file_columns: [{ file_column_name: row?.file_column_name || '', file_name: row?.file_name || '', file_source: row?.file_source || '' }],
-            }]);
-        }
-    }, [location.state, db_column_name, row]);
+        // Step 2: For each table column, insert or update data in lineage_data_db_table_columns
+        for (TableColumn column : table.tableColumns()) {
+            logger.info("Saving column: {}", column.columnName());
 
-    // Function to handle form input changes
-    const handleInputChange = (dbIndex, fileIndex, e) => {
-        const { name, value } = e.target;
-        const updatedFormData = [...formData];
-        updatedFormData[dbIndex].file_columns[fileIndex] = {
-            ...updatedFormData[dbIndex].file_columns[fileIndex],
-            [name]: value,
-        };
-        setFormData(updatedFormData);
-    };
-
-    // Function to handle form submission
-    const handleSubmit = () => {
-
-        const payload = { databaseName,
-            tableName: dbTableName,
-            tableColumns: formData.map((dbRow)=>({
-                columnName:dbRow.db_column_name,
-                processName:processName,
-                fileColumns:dbRow.file_columns.map((fileColumn)=>({
-                    columnName:fileColumn.file_column_name,
-                    fileName:fileColumn.file_name,
-                    fileSource:fileColumn.file_source
-                })),
-            })),
-        };
-        console.log("payload",payload);
-        fetch("http://localhost:8080/saveColumnMappings", {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(payload),
-        })
-        .then((response) => {
-            return response.text();
-          })
-          .then((result) => {
-            console.log('Data updated successfully:', result);
-            navigate(-1); // Navigate to the previous page
-          })
-          .catch((error) => {
-            console.error('Error updating data:', error);
-          });
-    };
-
-    // Function to handle adding a new file column to the existing DB column
-    const handleAddFileColumn = (dbIndex) => {
-        const updatedFormData = [...formData];
-        updatedFormData[dbIndex].file_columns.push({
-            file_column_name: '',
-            file_name: '',
-            file_source: ''
-        });
-        setFormData(updatedFormData);
-    };
-
-    // Function to handle adding a new DB column with empty file columns
-    const handleAddDbColumn = () => {
-        setFormData((prevFormData) => [
-            ...prevFormData,
-            {
-                db_column_name: `DB_${prevFormData.length + 1}`,
-                file_columns: [{ file_column_name: '', file_name: '', file_source: '' }]
+            // Check if the column already exists by fetching db_column_id
+            String findColumnQuery = "SELECT db_column_id FROM rawdata.dbo.lineage_data_db_table_columns WHERE db_table_id = ? AND db_column_name = ?";
+            String dbColumnId = null;
+            try{
+                dbColumnId = jdbcTemplate.queryForObject(findColumnQuery, String.class, dbTableId, column.columnName());
             }
-        ]);
-    };
+            catch(Exception e){
+                e.printStackTrace();
+            }
 
-    // Function to handle deleting a row (either DB or File column)
-    const handleDeleteFileColumn = (dbIndex, fileIndex) => {
-        const updatedFormData = [...formData];
-        updatedFormData[dbIndex].file_columns.splice(fileIndex, 1);  // Remove the selected file column
-        setFormData(updatedFormData);
-    };
+            if (dbColumnId == null) {
+                // Insert a new column if it doesn't exist
+                String insertColumnQuery = "INSERT INTO rawdata.dbo.lineage_data_db_table_columns (db_table_id, db_column_name,process_name,created_by) VALUES (?, ?,?,?)";
+                jdbcTemplate.update(insertColumnQuery, dbTableId, column.columnName(),column.processName(),CREATED_BY);
 
-    // Function to delete a DB column and all its file columns
-    const handleDeleteDbColumn = (dbIndex) => {
-        const updatedFormData = [...formData];
-        updatedFormData.splice(dbIndex, 1);  // Remove the selected DB column
-        setFormData(updatedFormData);
-    };
+                // Fetch the newly inserted db_column_id
+                dbColumnId = jdbcTemplate.queryForObject(findColumnQuery, String.class, dbTableId, column.columnName(),column.processName(),CREATED_BY);
+            } else {
+                // Update the existing column
+                String updateColumnQuery = "UPDATE rawdata.dbo.lineage_data_db_table_columns SET db_column_name = ? WHERE db_column_id = ?";
+                jdbcTemplate.update(updateColumnQuery, column.columnName(), dbColumnId);
+            }
 
-    // Handle cancel action
-    const handleCancel = () => {
-        navigate(-1);  // Go back without saving
-    };
+            // Step 3: For each file column, insert or update data in lineage_data_file_columns
+            for (FileColumn fileColumn : column.fileColumns()) {
+                logger.info("Saving file column: {}", fileColumn.columnName());
 
-    return (
-        <div className="root">
-            <div className="main">
-                <div id="holder">
-                    <div id="content-top">
-                        <div id="bannerContentSmall">
-                            <div className="header">
-                                <div className="headerLeft"></div>
-                            </div>
-                        </div>
-                    </div>
-                    <div className="content-bottom">
-                        <div className="top-most-div">
-                            <div className="breadcrumb">
-                                <span className="breadcrumbleftInside">
-                                    <b>Add/Edit Data Screen</b>
-                                </span>
-                            </div>
-                            <div className="highlight">
-                                <table className="headTable">
-                                    <tbody>
-                                        <tr>
-                                            <th>Db Column Name</th>
-                                            <th>File Column Name</th>
-                                            <th>File Name</th>
-                                            <th>File Source</th>
-                                            <th>Actions</th>
-                                        </tr>
-                                        {formData.map((dbRow, dbIndex) => (
-                                            <React.Fragment key={dbIndex}>
+                // Check if the file column already exists
+                String findFileColumnQuery = "SELECT file_column_id FROM rawdata.dbo.lineage_data_file_columns WHERE db_column_id = ? AND file_column_name = ?";
+                String fileColumnId = null;
+                try{
+                    fileColumnId = jdbcTemplate.queryForObject(findFileColumnQuery, String.class, dbColumnId, fileColumn.columnName());
+                }
+                catch(Exception e){
+                    e.printStackTrace();
+                }
 
-                                                {dbRow.file_columns.map((fileRow, fileIndex) => (
-                                                    <tr key={fileIndex}>
-                                                        <td>
-                                                            <input
-                                                                type="text"
-                                                                name="db_column_name"
-                                                                value={dbRow.db_column_name}
-                                                                disabled // Disable editing of db_column_name
-                                                            />
-                                                        </td>
-                                                        <td>
-                                                            <input
-                                                                type="text"
-                                                                name="file_column_name"
-                                                                value={fileRow.file_column_name}
-                                                                onChange={(e) => handleInputChange(dbIndex, fileIndex, e)}
-                                                            />
-                                                        </td>
-                                                        <td>
-                                                            <input
-                                                                type="text"
-                                                                name="file_name"
-                                                                value={fileRow.file_name}
-                                                                onChange={(e) => handleInputChange(dbIndex, fileIndex, e)}
-                                                            />
-                                                        </td>
-                                                        <td>
-                                                            <input
-                                                                type="text"
-                                                                name="file_source"
-                                                                value={fileRow.file_source}
-                                                                onChange={(e) => handleInputChange(dbIndex, fileIndex, e)}
-                                                            />
-                                                        </td>
-                                                        <td>
-                                                            <button onClick={() => handleDeleteFileColumn(dbIndex, fileIndex)}>
-                                                                Delete File Column
-                                                            </button>
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                                <tr>
-                                                    <td colSpan="5">
-                                                        <button onClick={() => handleAddFileColumn(dbIndex)} className="add-file-btn">
-                                                            Add File Column to {dbRow.db_column_name}
-                                                        </button>
-                                                    </td>
-                                                </tr>
-                                            </React.Fragment>
-                                        ))}
-                                        <tr>
-                                            <td colSpan="5">
-                                                <button onClick={handleAddDbColumn} className="add-db-btn">
-                                                    Add New DB Column
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-                                <div>
-                                    <button onClick={handleSubmit} className="btn submit-btn">
-                                        Submit
-                                    </button>
-                                    <button onClick={handleCancel} className="btn cancel-btn">
-                                        Cancel
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-};
+                if (fileColumnId == null) {
+                    // Insert new file column
+                    String insertFileColumnQuery = "INSERT INTO rawdata.dbo.lineage_data_file_columns (db_column_id, file_column_name, file_name, file_source,created_by) VALUES (?, ?, ?, ?,?)";
+                    jdbcTemplate.update(insertFileColumnQuery, dbColumnId, fileColumn.columnName(), fileColumn.fileName(), fileColumn.fileSource(),CREATED_BY);
+                } else {
+                    // Update the existing file column
+                    String updateFileColumnQuery = "UPDATE rawdata.dbo.lineage_data_file_columns SET file_column_name=?,file_name = ?, file_source = ? WHERE file_column_id = ?";
+                    jdbcTemplate.update(updateFileColumnQuery,fileColumn.columnName(), fileColumn.fileName(), fileColumn.fileSource(), fileColumnId);
+                }
+            }
+        }
+    }
 
-export default AddEditDataScreen;
+    // Existing method for mapping data from the DB
+    private static class LineageDataRowMapper implements RowMapper<Table> {
+        private final List<Table> lineageData = new ArrayList<>();
+        private Table currentTable;
+        private TableColumn currentColumn;
+
+        @Override
+        public Table mapRow(ResultSet rs, int rowNum) throws SQLException {
+            String tableName = rs.getString("db_table_name");
+            logger.debug("Processing table : {}", tableName);
+
+            currentTable = lineageData.stream().filter(t -> t.tableName().equals(tableName)).findFirst().orElse(null);
+            if (currentTable == null) {
+                logger.info("Creating new table entry for table : {}", tableName);
+                currentTable = new Table(rs.getString("database_name"), rs.getString("db_table_name"), new ArrayList<>());
+                lineageData.add(currentTable);
+            }
+
+            String columnName = rs.getString("db_column_name");
+            logger.debug("Processing column : {}", columnName);
+
+            currentColumn = currentTable.tableColumns().stream().filter(c -> c.columnName().equals(columnName)).findFirst().orElse(null);
+            if (currentColumn == null) {
+                logger.info("Creating new column entry for column : {}", columnName);
+                currentColumn = new TableColumn(rs.getString("db_column_name"), rs.getString("process_name"), new ArrayList<>());
+                currentTable.tableColumns().add(currentColumn);
+            }
+
+            if (rs.getString("file_column_name") != null) {
+                String fileColumnName = rs.getString("file_column_name");
+                logger.debug("Processing file column : {}", fileColumnName);
+                FileColumn fileColumn = new FileColumn(rs.getString("file_column_name"), rs.getString("file_name"), rs.getString("file_source"));
+                currentColumn.fileColumns().add(fileColumn);
+            }
+
+            return null;
+        }
+
+        public List<Table> getLineageData() {
+            return lineageData;
+        }
+    }
+}
+
