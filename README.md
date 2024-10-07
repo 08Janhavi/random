@@ -352,3 +352,16 @@ public class IMLineageDataDAO {
         }
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+2024-10-07 14:48:31 WARN  org.springframework.web.servlet.mvc.support.DefaultHandlerExceptionResolver - Resolved [org.springframework.http.converter.HttpMessageNotReadableException: JSON parse error: Cannot deserialize value of type `java.util.ArrayList<com.nomura.im.lineage.vo.TableColumn>` from Object value (token `JsonToken.START_OBJECT`)]
