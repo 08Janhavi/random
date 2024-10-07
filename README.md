@@ -1,98 +1,229 @@
-USE rawdata
-go
-CREATE TABLE dbo.lineage_data_file_columns
-(
-    db_column_id     varchar(32) NOT NULL,
-    file_column_name char(20)    NOT NULL,
-    file_name        char(30)    NOT NULL,
-    file_source      char(30)    NOT NULL,
-    created_by       char(30)    NOT NULL,
-    created_date     datetime    DEFAULT getdate() NOT NULL,
-    updated_by       char(30)    NULL,
-    updated_date     datetime    NULL,
-    file_column_id   varchar(32) DEFAULT newid()   NOT NULL,
-    CONSTRAINT lineage_da_605665281
-    PRIMARY KEY CLUSTERED (file_column_id)
-)
-LOCK ALLPAGES
-go
-IF OBJECT_ID('dbo.lineage_data_file_columns') IS NOT NULL
-    PRINT '<<< CREATED TABLE dbo.lineage_data_file_columns >>>'
-ELSE
-    PRINT '<<< FAILED CREATING TABLE dbo.lineage_data_file_columns >>>'
-go
-ALTER TABLE dbo.lineage_data_file_columns
-    ADD CONSTRAINT lineage_da_108566699
-    FOREIGN KEY (db_column_id)
-    REFERENCES dbo.lineage_data_db_table_columns (db_column_id)
-go
 
 
 
 
 
 
+import React, { useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 
+const AddEditDataScreen = () => {
+    const location = useLocation();
+    const navigate = useNavigate();
 
+    // Extract db_column_name, row, etc. from location.state or set empty defaults
+    const { databaseName, dbTableName,processName, db_column_name = '', row = [] } = location.state || {};
 
+    // Initialize formData with the correct structure
+    const [formData, setFormData] = useState([
+        {
+            db_column_name: db_column_name || '',
+            file_columns: [{ file_column_name: row?.file_column_name || '', file_name: row?.file_name || '', file_source: row?.file_source || '' }],
+        }
+    ]);
 
+    // Load data into formData when the component mounts or when location state changes
+    useEffect(() => {
+        if (location.state) {
+            setFormData([{
+                db_column_name: db_column_name || '',
+                file_columns: [{ file_column_name: row?.file_column_name || '', file_name: row?.file_name || '', file_source: row?.file_source || '' }],
+            }]);
+        }
+    }, [location.state, db_column_name, row]);
 
+    // Function to handle form input changes
+    const handleInputChange = (dbIndex, fileIndex, e) => {
+        const { name, value } = e.target;
+        const updatedFormData = [...formData];
+        updatedFormData[dbIndex].file_columns[fileIndex] = {
+            ...updatedFormData[dbIndex].file_columns[fileIndex],
+            [name]: value,
+        };
+        setFormData(updatedFormData);
+    };
 
-USE rawdata
-go
-CREATE TABLE dbo.lineage_data_db_table_columns
-(
-    db_table_id    varchar(32) NOT NULL,
-    db_column_name char(20)    NOT NULL,
-    process_name   char(30)    NOT NULL,
-    created_by     char(30)    NOT NULL,
-    created_date   datetime    DEFAULT getdate() NOT NULL,
-    updated_by     char(30)    NULL,
-    updated_date   datetime    NULL,
-    db_column_id   varchar(32) DEFAULT newid()   NOT NULL,
-    CONSTRAINT lineage_da_21280498911
-    PRIMARY KEY CLUSTERED (db_column_id)
-)
-LOCK ALLPAGES
-go
-IF OBJECT_ID('dbo.lineage_data_db_table_columns') IS NOT NULL
-    PRINT '<<< CREATED TABLE dbo.lineage_data_db_table_columns >>>'
-ELSE
-    PRINT '<<< FAILED CREATING TABLE dbo.lineage_data_db_table_columns >>>'
-go
-ALTER TABLE dbo.lineage_data_db_table_columns
-    ADD CONSTRAINT lineage_da_28566414
-    FOREIGN KEY (db_table_id)
-    REFERENCES dbo.lineage_data_db_tables (db_table_id)
-go
+    // Function to handle form submission
+    const handleSubmit = () => {
 
+        const payload = { databaseName,
+            tableName: dbTableName,
+            tableColumns: formData.map((dbRow)=>({
+                columnName:dbRow.db_column_name,
+                processName:processName,
+                fileColumns:dbRow.file_columns.map((fileColumn)=>({
+                    columnName:fileColumn.file_column_name,
+                    fileName:fileColumn.file_name,
+                    fileSource:fileColumn.file_source
+                })),
+            })),
+        };
+        console.log("payload",payload);
+        fetch("http://localhost:8080/saveColumnMappings", {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payload),
+        })
+        .then((response) => {
+            return response.text();
+          })
+          .then((result) => {
+            console.log('Data updated successfully:', result);
+            navigate(-1); // Navigate to the previous page
+          })
+          .catch((error) => {
+            console.error('Error updating data:', error);
+          });
+    };
 
+    // Function to handle adding a new file column to the existing DB column
+    const handleAddFileColumn = (dbIndex) => {
+        const updatedFormData = [...formData];
+        updatedFormData[dbIndex].file_columns.push({
+            file_column_name: '',
+            file_name: '',
+            file_source: ''
+        });
+        setFormData(updatedFormData);
+    };
 
+    // Function to handle adding a new DB column with empty file columns
+    const handleAddDbColumn = () => {
+        setFormData((prevFormData) => [
+            ...prevFormData,
+            {
+                db_column_name: `DB_${prevFormData.length + 1}`,
+                file_columns: [{ file_column_name: '', file_name: '', file_source: '' }]
+            }
+        ]);
+    };
 
+    // Function to handle deleting a row (either DB or File column)
+    const handleDeleteFileColumn = (dbIndex, fileIndex) => {
+        const updatedFormData = [...formData];
+        updatedFormData[dbIndex].file_columns.splice(fileIndex, 1);  // Remove the selected file column
+        setFormData(updatedFormData);
+    };
 
+    // Function to delete a DB column and all its file columns
+    const handleDeleteDbColumn = (dbIndex) => {
+        const updatedFormData = [...formData];
+        updatedFormData.splice(dbIndex, 1);  // Remove the selected DB column
+        setFormData(updatedFormData);
+    };
 
+    // Handle cancel action
+    const handleCancel = () => {
+        navigate(-1);  // Go back without saving
+    };
 
+    return (
+        <div className="root">
+            <div className="main">
+                <div id="holder">
+                    <div id="content-top">
+                        <div id="bannerContentSmall">
+                            <div className="header">
+                                <div className="headerLeft"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="content-bottom">
+                        <div className="top-most-div">
+                            <div className="breadcrumb">
+                                <span className="breadcrumbleftInside">
+                                    <b>Add/Edit Data Screen</b>
+                                </span>
+                            </div>
+                            <div className="highlight">
+                                <table className="headTable">
+                                    <tbody>
+                                        <tr>
+                                            <th>Db Column Name</th>
+                                            <th>File Column Name</th>
+                                            <th>File Name</th>
+                                            <th>File Source</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                        {formData.map((dbRow, dbIndex) => (
+                                            <React.Fragment key={dbIndex}>
 
+                                                {dbRow.file_columns.map((fileRow, fileIndex) => (
+                                                    <tr key={fileIndex}>
+                                                        <td>
+                                                            <input
+                                                                type="text"
+                                                                name="db_column_name"
+                                                                value={dbRow.db_column_name}
+                                                                disabled // Disable editing of db_column_name
+                                                            />
+                                                        </td>
+                                                        <td>
+                                                            <input
+                                                                type="text"
+                                                                name="file_column_name"
+                                                                value={fileRow.file_column_name}
+                                                                onChange={(e) => handleInputChange(dbIndex, fileIndex, e)}
+                                                            />
+                                                        </td>
+                                                        <td>
+                                                            <input
+                                                                type="text"
+                                                                name="file_name"
+                                                                value={fileRow.file_name}
+                                                                onChange={(e) => handleInputChange(dbIndex, fileIndex, e)}
+                                                            />
+                                                        </td>
+                                                        <td>
+                                                            <input
+                                                                type="text"
+                                                                name="file_source"
+                                                                value={fileRow.file_source}
+                                                                onChange={(e) => handleInputChange(dbIndex, fileIndex, e)}
+                                                            />
+                                                        </td>
+                                                        <td>
+                                                            <button onClick={() => handleDeleteFileColumn(dbIndex, fileIndex)}>
+                                                                Delete File Column
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                                <tr>
+                                                    <td colSpan="5">
+                                                        <button onClick={() => handleAddFileColumn(dbIndex)} className="add-file-btn">
+                                                            Add File Column to {dbRow.db_column_name}
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            </React.Fragment>
+                                        ))}
+                                        <tr>
+                                            <td colSpan="5">
+                                                <button onClick={handleAddDbColumn} className="add-db-btn">
+                                                    Add New DB Column
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                                <div>
+                                    <button onClick={handleSubmit} className="btn submit-btn">
+                                        Submit
+                                    </button>
+                                    <button onClick={handleCancel} className="btn cancel-btn">
+                                        Cancel
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
 
-
-USE rawdata
-go
-CREATE TABLE dbo.lineage_data_db_tables
-(
-    database_name char(15)    NOT NULL,
-    db_table_name char(20)    NOT NULL,
-    created_by    char(30)    NOT NULL,
-    created_date  datetime    DEFAULT getdate() NOT NULL,
-    updated_by    char(30)    NULL,
-    updated_date  datetime    NULL,
-    db_table_id   varchar(32) DEFAULT newid()   NOT NULL,
-    CONSTRAINT lineage_da_20640496631
-    PRIMARY KEY CLUSTERED (db_table_id)
-)
-LOCK ALLPAGES
-go
-IF OBJECT_ID('dbo.lineage_data_db_tables') IS NOT NULL
-    PRINT '<<< CREATED TABLE dbo.lineage_data_db_tables >>>'
-ELSE
-    PRINT '<<< FAILED CREATING TABLE dbo.lineage_data_db_tables >>>'
-go
+export default AddEditDataScreen;
