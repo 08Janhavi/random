@@ -1,72 +1,98 @@
-@Repository
-public class IMLineageDataDAO {
+USE rawdata
+go
+CREATE TABLE dbo.lineage_data_file_columns
+(
+    db_column_id     varchar(32) NOT NULL,
+    file_column_name char(20)    NOT NULL,
+    file_name        char(30)    NOT NULL,
+    file_source      char(30)    NOT NULL,
+    created_by       char(30)    NOT NULL,
+    created_date     datetime    DEFAULT getdate() NOT NULL,
+    updated_by       char(30)    NULL,
+    updated_date     datetime    NULL,
+    file_column_id   varchar(32) DEFAULT newid()   NOT NULL,
+    CONSTRAINT lineage_da_605665281
+    PRIMARY KEY CLUSTERED (file_column_id)
+)
+LOCK ALLPAGES
+go
+IF OBJECT_ID('dbo.lineage_data_file_columns') IS NOT NULL
+    PRINT '<<< CREATED TABLE dbo.lineage_data_file_columns >>>'
+ELSE
+    PRINT '<<< FAILED CREATING TABLE dbo.lineage_data_file_columns >>>'
+go
+ALTER TABLE dbo.lineage_data_file_columns
+    ADD CONSTRAINT lineage_da_108566699
+    FOREIGN KEY (db_column_id)
+    REFERENCES dbo.lineage_data_db_table_columns (db_column_id)
+go
 
-    private static final Logger logger = LogManager.getLogger(IMLineageDataDAO.class.getName());
 
-    @Autowired
-    private JdbcTemplate jdbcTemplate;
 
-    public void saveLineageData(Table table) {
-        logger.info("Saving lineage data for table: {}", table.tableName());
 
-        try {
-            // Step 1: Get the db_table_id from lineage_data_db_table
-            String findTableQuery = "SELECT db_table_id FROM rawdata.dbo.lineage_data_db_table WHERE database_name = ? AND db_table_name = ?";
-            String dbTableId = null;
-            try {
-                dbTableId = jdbcTemplate.queryForObject(findTableQuery, String.class, table.databaseName(), table.tableName());
-            } catch (EmptyResultDataAccessException e) {
-                logger.info("Table not found, inserting a new table entry.");
-                // Insert the new table if it doesn't exist
-                String insertTableQuery = "INSERT INTO rawdata.dbo.lineage_data_db_table (database_name, db_table_name) VALUES (?, ?)";
-                jdbcTemplate.update(insertTableQuery, table.databaseName(), table.tableName());
 
-                // Fetch the newly inserted db_table_id
-                dbTableId = jdbcTemplate.queryForObject(findTableQuery, String.class, table.databaseName(), table.tableName());
-            }
 
-            // Step 2: For each table column, insert or update data in lineage_data_db_table_columns
-            for (TableColumn column : table.tableColumns()) {
-                logger.info("Saving column: {}", column.columnName());
 
-                // Check if the column already exists by fetching db_column_id
-                String findColumnQuery = "SELECT db_column_id FROM rawdata.dbo.lineage_data_db_table_columns WHERE db_table_id = ? AND db_column_name = ?";
-                String dbColumnId = null;
-                try {
-                    dbColumnId = jdbcTemplate.queryForObject(findColumnQuery, String.class, dbTableId, column.columnName());
-                } catch (EmptyResultDataAccessException e) {
-                    logger.info("Column not found, inserting a new column.");
-                    // Insert a new column if it doesn't exist
-                    String insertColumnQuery = "INSERT INTO rawdata.dbo.lineage_data_db_table_columns (db_table_id, db_column_name) VALUES (?, ?)";
-                    jdbcTemplate.update(insertColumnQuery, dbTableId, column.columnName());
 
-                    // Fetch the newly inserted db_column_id
-                    dbColumnId = jdbcTemplate.queryForObject(findColumnQuery, String.class, dbTableId, column.columnName());
-                }
 
-                // Step 3: For each file column, insert or update data in lineage_data_file_columns
-                for (FileColumn fileColumn : column.fileColumns()) {
-                    logger.info("Saving file column: {}", fileColumn.columnName());
 
-                    // Check if the file column already exists
-                    String findFileColumnQuery = "SELECT file_column_id FROM rawdata.dbo.lineage_data_file_columns WHERE db_column_id = ? AND file_column_name = ?";
-                    String fileColumnId = null;
-                    try {
-                        fileColumnId = jdbcTemplate.queryForObject(findFileColumnQuery, String.class, dbColumnId, fileColumn.columnName());
-                    } catch (EmptyResultDataAccessException e) {
-                        logger.info("File column not found, inserting a new file column.");
-                        // Insert new file column if it doesn't exist
-                        String insertFileColumnQuery = "INSERT INTO rawdata.dbo.lineage_data_file_columns (db_column_id, file_column_name, file_name, file_source) VALUES (?, ?, ?, ?)";
-                        jdbcTemplate.update(insertFileColumnQuery, dbColumnId, fileColumn.columnName(), fileColumn.fileName(), fileColumn.fileSource());
-                    } catch (Exception ex) {
-                        logger.error("Error occurred while saving file column: {}", ex.getMessage());
-                        ex.printStackTrace();
-                    }
-                }
-            }
-        } catch (Exception ex) {
-            logger.error("Error occurred while saving lineage data: {}", ex.getMessage());
-            ex.printStackTrace();
-        }
-    }
-}
+
+
+USE rawdata
+go
+CREATE TABLE dbo.lineage_data_db_table_columns
+(
+    db_table_id    varchar(32) NOT NULL,
+    db_column_name char(20)    NOT NULL,
+    process_name   char(30)    NOT NULL,
+    created_by     char(30)    NOT NULL,
+    created_date   datetime    DEFAULT getdate() NOT NULL,
+    updated_by     char(30)    NULL,
+    updated_date   datetime    NULL,
+    db_column_id   varchar(32) DEFAULT newid()   NOT NULL,
+    CONSTRAINT lineage_da_21280498911
+    PRIMARY KEY CLUSTERED (db_column_id)
+)
+LOCK ALLPAGES
+go
+IF OBJECT_ID('dbo.lineage_data_db_table_columns') IS NOT NULL
+    PRINT '<<< CREATED TABLE dbo.lineage_data_db_table_columns >>>'
+ELSE
+    PRINT '<<< FAILED CREATING TABLE dbo.lineage_data_db_table_columns >>>'
+go
+ALTER TABLE dbo.lineage_data_db_table_columns
+    ADD CONSTRAINT lineage_da_28566414
+    FOREIGN KEY (db_table_id)
+    REFERENCES dbo.lineage_data_db_tables (db_table_id)
+go
+
+
+
+
+
+
+
+
+
+
+USE rawdata
+go
+CREATE TABLE dbo.lineage_data_db_tables
+(
+    database_name char(15)    NOT NULL,
+    db_table_name char(20)    NOT NULL,
+    created_by    char(30)    NOT NULL,
+    created_date  datetime    DEFAULT getdate() NOT NULL,
+    updated_by    char(30)    NULL,
+    updated_date  datetime    NULL,
+    db_table_id   varchar(32) DEFAULT newid()   NOT NULL,
+    CONSTRAINT lineage_da_20640496631
+    PRIMARY KEY CLUSTERED (db_table_id)
+)
+LOCK ALLPAGES
+go
+IF OBJECT_ID('dbo.lineage_data_db_tables') IS NOT NULL
+    PRINT '<<< CREATED TABLE dbo.lineage_data_db_tables >>>'
+ELSE
+    PRINT '<<< FAILED CREATING TABLE dbo.lineage_data_db_tables >>>'
+go
