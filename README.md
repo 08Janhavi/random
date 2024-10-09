@@ -162,7 +162,7 @@ const ViewDataScreen = () => {
         </>
 
 
-
+export default ViewDataScreen;
 
 
 
@@ -416,4 +416,4 @@ public class LineageDataController {
     )
 }
 
-export default ViewDataScreen;
+
