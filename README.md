@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
@@ -6,8 +5,7 @@ const AddEditDataScreen = () => {
     const location = useLocation();
     const navigate = useNavigate();
 
-    // Extract db_column_name, row, etc. from location.state or set empty defaults
-    const { databaseName, dbTableName,processName, db_column_name = '', row = [] } = location.state || {};
+    const { databaseName, dbTableName, processName, db_column_name = '', row = [] } = location.state || {};
 
     // Initialize formData with the correct structure
     const [formData, setFormData] = useState([
@@ -17,7 +15,6 @@ const AddEditDataScreen = () => {
         }
     ]);
 
-    // Load data into formData when the component mounts or when location state changes
     useEffect(() => {
         if (location.state) {
             setFormData([{
@@ -31,29 +28,52 @@ const AddEditDataScreen = () => {
     const handleInputChange = (dbIndex, fileIndex, e) => {
         const { name, value } = e.target;
         const updatedFormData = [...formData];
-        updatedFormData[dbIndex].file_columns[fileIndex] = {
-            ...updatedFormData[dbIndex].file_columns[fileIndex],
-            [name]: value,
-        };
+        if (fileIndex === null) {
+            updatedFormData[dbIndex] = {
+                ...updatedFormData[dbIndex],
+                [name]: value,
+            };
+        } else {
+            updatedFormData[dbIndex].file_columns[fileIndex] = {
+                ...updatedFormData[dbIndex].file_columns[fileIndex],
+                [name]: value,
+            };
+        }
         setFormData(updatedFormData);
     };
 
     // Function to handle form submission
     const handleSubmit = () => {
+        // Validate the form data
+        for (let dbRow of formData) {
+            if (!dbRow.db_column_name) {
+                alert("DB Column Name cannot be empty.");
+                return;
+            }
+            for (let fileColumn of dbRow.file_columns) {
+                if (!fileColumn.file_column_name || !fileColumn.file_name || !fileColumn.file_source) {
+                    alert("File Column Name, File Name, and File Source cannot be empty.");
+                    return;
+                }
+            }
+        }
 
-        const payload = { databaseName,
+        const payload = {
+            databaseName,
             tableName: dbTableName,
-            tableColumns: formData.map((dbRow)=>({
-                columnName:dbRow.db_column_name,
-                processName:processName,
-                fileColumns:dbRow.file_columns.map((fileColumn)=>({
-                    columnName:fileColumn.file_column_name,
-                    fileName:fileColumn.file_name,
-                    fileSource:fileColumn.file_source
+            tableColumns: formData.map((dbRow) => ({
+                columnName: dbRow.db_column_name,
+                processName: processName,
+                fileColumns: dbRow.file_columns.map((fileColumn) => ({
+                    columnName: fileColumn.file_column_name,
+                    fileName: fileColumn.file_name,
+                    fileSource: fileColumn.file_source,
                 })),
             })),
         };
-        console.log("payload",payload);
+
+        console.log("payload", payload);
+
         fetch("http://localhost:8080/saveColumnMappings", {
             method: 'POST',
             headers: {
@@ -61,16 +81,14 @@ const AddEditDataScreen = () => {
             },
             body: JSON.stringify(payload),
         })
-        .then((response) => {
-            return response.text();
-          })
-          .then((result) => {
+        .then((response) => response.text())
+        .then((result) => {
             console.log('Data updated successfully:', result);
             navigate(-1); // Navigate to the previous page
-          })
-          .catch((error) => {
+        })
+        .catch((error) => {
             console.error('Error updating data:', error);
-          });
+        });
     };
 
     // Function to handle adding a new file column to the existing DB column
@@ -84,63 +102,25 @@ const AddEditDataScreen = () => {
         setFormData(updatedFormData);
     };
 
-    // Function to handle adding a new DB column with empty file columns
+    // Function to handle adding a new DB column
     const handleAddDbColumn = () => {
         setFormData((prevFormData) => [
             ...prevFormData,
             {
-                db_column_name: `DB_${prevFormData.length + 1}`,
+                db_column_name: '',  // Start with an empty DB column name, requiring user input
                 file_columns: [{ file_column_name: '', file_name: '', file_source: '' }]
             }
         ]);
     };
 
-    // Function to handle deleting a row (either DB or File column)
+    // Function to handle deleting a file column
     const handleDeleteFileColumn = (dbIndex, fileIndex) => {
-    // Construct the payload similar to handleSubmit
-    const payload = {
-        databaseName,
-        tableName: dbTableName,
-        tableColumns: formData.map((dbRow) => ({
-            columnName: dbRow.db_column_name,
-            processName: processName,
-            fileColumns: dbRow.file_columns
-                .map((fileColumn ,i)=> ({
-                    columnName: fileColumn.file_column_name,
-                    fileName: fileColumn.file_name,
-                    fileSource: fileColumn.file_source,
-                })),
-        })),
+        const updatedFormData = [...formData];
+        updatedFormData[dbIndex].file_columns.splice(fileIndex, 1);  // Remove the selected file column
+        setFormData(updatedFormData);
     };
 
-    console.log("Delete payload", payload);
-
-    // Send a DELETE request with the updated payload
-    fetch(`http://localhost:8080/deleteFileColumn`, {
-        method: 'DELETE',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-    })
-    .then(response => {
-        if (response.ok) {
-            // Update the frontend only if the deletion was successful
-            const updatedFormData = [...formData];
-            updatedFormData[dbIndex].file_columns.splice(fileIndex, 1);  // Remove the selected file column
-            setFormData(updatedFormData);
-            console.log('File column deleted successfully.');
-            navigate(-1);
-        } else {
-            console.error('Failed to delete the file column.');
-        }
-    })
-    .catch(error => {
-        console.error('Error deleting file column:', error);
-    });
-};
-
-    // Function to delete a DB column and all its file columns
+    // Function to handle deleting a DB column
     const handleDeleteDbColumn = (dbIndex) => {
         const updatedFormData = [...formData];
         updatedFormData.splice(dbIndex, 1);  // Remove the selected DB column
@@ -182,23 +162,29 @@ const AddEditDataScreen = () => {
                                         </tr>
                                         {formData.map((dbRow, dbIndex) => (
                                             <React.Fragment key={dbIndex}>
+                                                <tr>
+                                                    <td>
+                                                        <input
+                                                            type="text"
+                                                            name="db_column_name"
+                                                            value={dbRow.db_column_name}
+                                                            onChange={(e) => handleInputChange(dbIndex, null, e)}  // Allow editing of db_column_name
+                                                            placeholder="Enter DB Column Name"
+                                                        />
+                                                    </td>
+                                                    <td colSpan="4"></td> {/* Empty row for the db_column_name input */}
+                                                </tr>
 
                                                 {dbRow.file_columns.map((fileRow, fileIndex) => (
                                                     <tr key={fileIndex}>
-                                                        <td>
-                                                            <input
-                                                                type="text"
-                                                                name="db_column_name"
-                                                                value={dbRow.db_column_name}
-                                                                disabled // Disable editing of db_column_name
-                                                            />
-                                                        </td>
+                                                        <td></td> {/* Keep DB column name in its row */}
                                                         <td>
                                                             <input
                                                                 type="text"
                                                                 name="file_column_name"
                                                                 value={fileRow.file_column_name}
                                                                 onChange={(e) => handleInputChange(dbIndex, fileIndex, e)}
+                                                                placeholder="Enter File Column Name"
                                                             />
                                                         </td>
                                                         <td>
@@ -207,6 +193,7 @@ const AddEditDataScreen = () => {
                                                                 name="file_name"
                                                                 value={fileRow.file_name}
                                                                 onChange={(e) => handleInputChange(dbIndex, fileIndex, e)}
+                                                                placeholder="Enter File Name"
                                                             />
                                                         </td>
                                                         <td>
@@ -215,6 +202,7 @@ const AddEditDataScreen = () => {
                                                                 name="file_source"
                                                                 value={fileRow.file_source}
                                                                 onChange={(e) => handleInputChange(dbIndex, fileIndex, e)}
+                                                                placeholder="Enter File Source"
                                                             />
                                                         </td>
                                                         <td>
@@ -227,7 +215,7 @@ const AddEditDataScreen = () => {
                                                 <tr>
                                                     <td colSpan="5">
                                                         <button onClick={() => handleAddFileColumn(dbIndex)} className="add-file-btn">
-                                                            Add File Column to {dbRow.db_column_name}
+                                                            Add File Column to {dbRow.db_column_name || 'New DB Column'}
                                                         </button>
                                                     </td>
                                                 </tr>
