@@ -1,12 +1,23 @@
 const handleDeleteFileColumn = (dbIndex, fileIndex) => {
-    const fileColumn = formData[dbIndex].file_columns[fileIndex];
+    if (!formData[dbIndex]) {
+        console.error(`Invalid dbIndex: ${dbIndex}`);
+        return;
+    }
 
-    // Only proceed if any of the file column fields are filled
+    const fileColumns = formData[dbIndex].file_columns;
+    
+    if (!fileColumns || !fileColumns[fileIndex]) {
+        console.error(`Invalid fileIndex: ${fileIndex}`);
+        return;
+    }
+
+    const fileColumn = fileColumns[fileIndex];
+
     if (fileColumn.file_column_name || fileColumn.file_name || fileColumn.file_source) {
         const payload = {
             databaseName,
             tableName: dbTableName,
-            tableColumns: formData.map((dbRow, i) => ({
+            tableColumns: formData.map((dbRow) => ({
                 columnName: dbRow.db_column_name,
                 processName: processName,
                 fileColumns: dbRow.file_columns.map((fileColumn) => ({
@@ -19,7 +30,6 @@ const handleDeleteFileColumn = (dbIndex, fileIndex) => {
 
         console.log("Delete payload", payload);
 
-        // Send a DELETE request with the payload
         fetch(`http://localhost:8080/deleteFileColumn`, {
             method: 'DELETE',
             headers: {
@@ -29,13 +39,11 @@ const handleDeleteFileColumn = (dbIndex, fileIndex) => {
         })
         .then((response) => {
             if (response.ok) {
-                // Update the frontend state after successful deletion
                 const updatedFormData = [...formData];
                 updatedFormData[dbIndex].file_columns.splice(fileIndex, 1);  // Remove the selected file column
 
-                // If no more file columns left, remove the DB column entirely
                 if (updatedFormData[dbIndex].file_columns.length === 0) {
-                    updatedFormData.splice(dbIndex, 1);
+                    updatedFormData.splice(dbIndex, 1); // Remove the DB column if it has no file columns left
                 }
 
                 setFormData(updatedFormData);
@@ -48,13 +56,11 @@ const handleDeleteFileColumn = (dbIndex, fileIndex) => {
             console.error('Error deleting file column:', error);
         });
     } else {
-        // Directly update frontend state if no backend call is needed
         const updatedFormData = [...formData];
         updatedFormData[dbIndex].file_columns.splice(fileIndex, 1);  // Remove the selected file column
 
-        // If no more file columns left, remove the DB column entirely
         if (updatedFormData[dbIndex].file_columns.length === 0) {
-            updatedFormData.splice(dbIndex, 1);
+            updatedFormData.splice(dbIndex, 1); // Remove the DB column if it has no file columns left
         }
 
         setFormData(updatedFormData);
