@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-
 const ViewDataScreen = () => {
-    const [databaseName, setDatabaseName] = useState(()=>{
+    const [databaseName, setDatabaseName] = useState(() => {
         return localStorage.getItem('databaseName') || '';
     });
-    const [dbTableName, setDbTableName] = useState(()=>{
+    const [dbTableName, setDbTableName] = useState(() => {
         return localStorage.getItem('dbTableName') || '';
     });
     const [data, setData] = useState([]);
@@ -14,34 +13,33 @@ const ViewDataScreen = () => {
     const [dbTables, setDbTables] = useState([]);
     const navigate = useNavigate();
 
-    useEffect(()=>{
-        localStorage.setItem('databaseName',databaseName);
-    },[databaseName]);
-
-    useEffect(()=>{
-        localStorage.setItem('dbTableName',dbTableName);
-    },[dbTableName]);
-    
-    useEffect(()=>{
-        fetch(`http://localhost:8080/getDatabases`)
-        .then((response)=>response.json())
-        .then((data)=>{
-            setDatabases(data);
-        })
-        .catch((error) => console.error("error fetching databases",error));
-    },[]);
-
-    useEffect(()=>{
-        fetch(`http://localhost:8080/getTables`)
-        .then((response)=>response.json())
-        .then((data)=>{
-            setDbTables(data);
-        })
-        .catch((error) => console.error("error fetching tables",error));
-    },[]);
+    useEffect(() => {
+        localStorage.setItem('databaseName', databaseName);
+    }, [databaseName]);
 
     useEffect(() => {
-        console.log(databaseName,dbTableName);
+        localStorage.setItem('dbTableName', dbTableName);
+    }, [dbTableName]);
+
+    useEffect(() => {
+        fetch(`http://localhost:8080/getDatabases`)
+            .then((response) => response.json())
+            .then((data) => {
+                setDatabases(data);
+            })
+            .catch((error) => console.error("error fetching databases", error));
+    }, []);
+
+    useEffect(() => {
+        fetch(`http://localhost:8080/getTables`)
+            .then((response) => response.json())
+            .then((data) => {
+                setDbTables(data);
+            })
+            .catch((error) => console.error("error fetching tables", error));
+    }, []);
+
+    useEffect(() => {
         if (databaseName && dbTableName) {
             fetch(`http://localhost:8080/getColumnMappings?db=${databaseName}&table=${dbTableName}&_=${new Date().getTime()}`)
                 .then((response) => response.json())
@@ -53,47 +51,34 @@ const ViewDataScreen = () => {
         }
     }, [databaseName, dbTableName]);
 
-    const [processName,setProcessName]=useState("");
+    const [processName, setProcessName] = useState("");
 
-    const structureData= (data) => {
+    const structureData = (data) => {
         const result = [];
         const table = data[0];
 
-        if(table && table.tableColumns){
-            table.tableColumns.forEach((column) =>{
-                const fileColumns=column.fileColumns.map(fileCol => ({
-                    file_column_name:fileCol.columnName,
-                    file_name:fileCol.fileName,
-                    file_source:fileCol.fileSource,
+        if (table && table.tableColumns) {
+            table.tableColumns.forEach((column) => {
+                const fileColumns = column.fileColumns.map(fileCol => ({
+                    file_column_name: fileCol.columnName,
+                    file_name: fileCol.fileName,
+                    file_source: fileCol.fileSource,
                 }));
                 setProcessName(column.processName);
-                console.log(column.processName);
                 result.push({
-                    db_column_name:column.columnName,
-                    rows:fileColumns,
+                    db_column_name: column.columnName,
+                    rows: fileColumns,
                 });
             });
         }
         return result;
     };
 
-    // const groupByDbColumnName = (data) => {
-    //     const grouped = {};
-    //     data.forEach((row) => {
-    //         if (!grouped[row.db_column_name]) {
-    //             grouped[row.db_column_name] = [];
-    //         }
-    //         grouped[row.db_column_name].push(row);
-    //     });
-    //     return grouped;
-    // };
-
+    // Edit button handler
     const handleEdit = () => {
-        navigate('/addEditDataScreen', { state: { databaseName, dbTableName,processName } });
-    };
-
-    const handleClose = () => {
-        window.close();
+        navigate('/addEditDataScreen', {
+            state: { databaseName, dbTableName, processName, data }
+        });
     };
 
     return (
@@ -114,14 +99,13 @@ const ViewDataScreen = () => {
                                     <span className="breadcrumbLeftInside">
                                         <b>View Data Screen</b>
                                     </span>
-
                                 </div>
                                 <div className="dropdowns-container">
                                     <label>
                                         Database Name:
                                         <select value={databaseName} onChange={(e) => setDatabaseName(e.target.value)}>
-                                        <option value="">Select Database</option>
-                                            {databases.map((db)=>(
+                                            <option value="">Select Database</option>
+                                            {databases.map((db) => (
                                                 <option key={db} value={db}>{db}</option>
                                             ))}
                                         </select>
@@ -130,7 +114,7 @@ const ViewDataScreen = () => {
                                         DB Table Name:
                                         <select value={dbTableName} onChange={(e) => setDbTableName(e.target.value)}>
                                             <option value="">Select Table</option>
-                                            {dbTables.map((table)=>(
+                                            {dbTables.map((table) => (
                                                 <option key={table} value={table}>{table}</option>
                                             ))}
                                         </select>
@@ -145,7 +129,7 @@ const ViewDataScreen = () => {
                                                 <th>File Name</th>
                                                 <th>File Source</th>
                                             </tr>
-                                            {data.map((item,index) => (
+                                            {data.map((item, index) => (
                                                 <React.Fragment key={index}>
                                                     {item.rows.map((row, rowIndex) => (
                                                         <tr key={`${index}-${rowIndex}`}>
@@ -155,20 +139,17 @@ const ViewDataScreen = () => {
                                                             <td>{row.file_column_name}</td>
                                                             <td>{row.file_name}</td>
                                                             <td>{row.file_source}</td>
-                                                            
                                                         </tr>
                                                     ))}
                                                 </React.Fragment>
                                             ))}
                                         </tbody>
-
                                     </table>
                                     <table className="table-xml">
                                         <tbody>
                                             <tr>
                                                 <td>
-                                                    
-                                                <button onClick={()=> handleEdit()} className='btn edit-btn'>Edit</button>
+                                                    <button onClick={handleEdit} className='btn edit-btn'>Edit</button>
                                                 </td>
                                             </tr>
                                         </tbody>
@@ -180,7 +161,7 @@ const ViewDataScreen = () => {
                 </div>
             </div>
         </>
-    )
-}
+    );
+};
 
 export default ViewDataScreen;
