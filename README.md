@@ -34,22 +34,40 @@ public void deleteFileColumn(Table table) throws Exception {
             }
         }
 
-        // Step 4: After deleting all file columns, delete the db column itself
-        String deleteDbColumnQuery = "DELETE FROM rawdata.dbo.lineage_data_db_table_columns WHERE db_column_id = ?";
-        int columnRowsAffected = jdbcTemplate.update(deleteDbColumnQuery, dbColumnId);
+        // Step 4: Check if there are any remaining file columns for the current db_column_id
+        String checkFileColumnsQuery = "SELECT COUNT(*) FROM rawdata.dbo.lineage_data_file_columns WHERE db_column_id = ?";
+        Integer remainingFileColumns = jdbcTemplate.queryForObject(checkFileColumnsQuery, Integer.class, dbColumnId);
 
-        if (columnRowsAffected == 0) {
-            throw new Exception("Failed to delete db column: " + tableColumn.columnName());
+        if (remainingFileColumns != null && remainingFileColumns == 0) {
+            // If no file columns are left, delete the db column
+            String deleteDbColumnQuery = "DELETE FROM rawdata.dbo.lineage_data_db_table_columns WHERE db_column_id = ?";
+            int columnRowsAffected = jdbcTemplate.update(deleteDbColumnQuery, dbColumnId);
+
+            if (columnRowsAffected == 0) {
+                throw new Exception("Failed to delete db column: " + tableColumn.columnName());
+            }
+        } else {
+            logger.info("Skipping db column deletion for column: {} as it still has associated file columns.", tableColumn.columnName());
         }
     }
 
-    // Step 5: After deleting all columns, delete the table itself
-    String deleteDbTableQuery = "DELETE FROM rawdata.dbo.lineage_data_db_tables WHERE db_table_id = ?";
-    int tableRowsAffected = jdbcTemplate.update(deleteDbTableQuery, dbTableId);
+    // Step 5: After deleting all columns, check if there are any remaining columns for the db_table_id
+    String checkDbColumnsQuery = "SELECT COUNT(*) FROM rawdata.dbo.lineage_data_db_table_columns WHERE db_table_id = ?";
+    Integer remainingDbColumns = jdbcTemplate.queryForObject(checkDbColumnsQuery, Integer.class, dbTableId);
 
-    if (tableRowsAffected == 0) {
-        throw new Exception("Failed to delete table: " + table.tableName());
+    if (remainingDbColumns != null && remainingDbColumns == 0) {
+        // If no db columns are left, delete the table itself
+        String deleteDbTableQuery = "DELETE FROM rawdata.dbo.lineage_data_db_tables WHERE db_table_id = ?";
+        int tableRowsAffected = jdbcTemplate.update(deleteDbTableQuery, dbTableId);
+
+        if (tableRowsAffected == 0) {
+            throw new Exception("Failed to delete table: " + table.tableName());
+        }
+
+        logger.info("Table {} deleted successfully.", table.tableName());
+    } else {
+        logger.info("Skipping table deletion for table: {} as it still has associated columns.", table.tableName());
     }
 
-    logger.info("File columns, db columns, and table deleted successfully.");
+    logger.info("File columns, db columns (where applicable), and table deletion process completed.");
 }
