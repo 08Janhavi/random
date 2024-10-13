@@ -1,146 +1,132 @@
-import com.fasterxml.jackson.databind.ObjectMapper;
+import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.http.MediaType;
-import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.setup.MockMvcBuilders;
-import org.springframework.test.web.servlet.result.MockMvcResultMatchers;
-import java.util.ArrayList;
+import org.springframework.jdbc.core.JdbcTemplate;
+import java.util.Arrays;
 import java.util.List;
-import static org.mockito.Mockito.when;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 
-@WebMvcTest(LineageDataController.class)
-public class LineageDataControllerTest {
-
-    private MockMvc mockMvc;
+class IMLineageDataDAOTest {
 
     @Mock
-    private IMLineageDataDAO lineageDataDAO;
+    private JdbcTemplate jdbcTemplate;
 
     @InjectMocks
-    private LineageDataController lineageDataController;
-
-    private ObjectMapper objectMapper = new ObjectMapper();
+    private IMLineageDataDAO dao;
 
     @BeforeEach
-    public void setup() {
+    void setUp() {
         MockitoAnnotations.openMocks(this);
-        mockMvc = MockMvcBuilders.standaloneSetup(lineageDataController).build();
     }
 
     @Test
-    public void testGetDatabasesSuccess() throws Exception {
-        List<String> databases = new ArrayList<>();
-        databases.add("db1");
-        databases.add("db2");
+    void getAllDatabases_ShouldReturnDatabaseList() throws Exception {
+        // Arrange
+        String query = "SELECT DISTINCT database_name FROM rawdata.dbo.lineage_data_db_tables";
+        List<String> mockResult = Arrays.asList("db1", "db2", "db3");
+        when(jdbcTemplate.queryForList(query, String.class)).thenReturn(mockResult);
 
-        when(lineageDataDAO.getAllDatabases()).thenReturn(databases);
+        // Act
+        List<String> databases = dao.getAllDatabases();
 
-        mockMvc.perform(get("/getDatabases"))
-                .andExpect(MockMvcResultMatchers.status().isOk())
-                .andExpect(MockMvcResultMatchers.jsonPath("$[0]").value("db1"))
-                .andExpect(MockMvcResultMatchers.jsonPath("$[1]").value("db2"));
+        // Assert
+        assertNotNull(databases);
+        assertEquals(3, databases.size());
+        assertEquals("db1", databases.get(0));
+        verify(jdbcTemplate, times(1)).queryForList(query, String.class);
     }
 
     @Test
-    public void testGetDatabasesError() throws Exception {
-        when(lineageDataDAO.getAllDatabases()).thenThrow(new RuntimeException("DB Error"));
+    void getAllTables_ShouldReturnTableList() throws Exception {
+        // Arrange
+        String query = "SELECT DISTINCT db_table_name FROM rawdata.dbo.lineage_data_db_tables";
+        List<String> mockResult = Arrays.asList("table1", "table2");
+        when(jdbcTemplate.queryForList(query, String.class)).thenReturn(mockResult);
 
-        mockMvc.perform(get("/getDatabases"))
-                .andExpect(MockMvcResultMatchers.status().isOk())
-                .andExpect(MockMvcResultMatchers.jsonPath("$").isEmpty());
+        // Act
+        List<String> tables = dao.getAllTables();
+
+        // Assert
+        assertNotNull(tables);
+        assertEquals(2, tables.size());
+        assertEquals("table1", tables.get(0));
+        verify(jdbcTemplate, times(1)).queryForList(query, String.class);
     }
 
     @Test
-    public void testGetTablesSuccess() throws Exception {
-        List<String> tables = new ArrayList<>();
-        tables.add("table1");
-        tables.add("table2");
+    void getLineageDataFromDB_ShouldReturnLineageData() {
+        // Arrange
+        String databaseName = "db1";
+        String tableName = "table1";
+        String query = "SELECT t.db_table_id, t.database_name, t.db_table_name, tc.db_column_id, tc.db_column_name, tc.process_name, " +
+                "fc.file_column_name, fc.file_name, fc.file_source " +
+                "FROM rawdata.dbo.lineage_data_db_tables t " +
+                "LEFT JOIN rawdata.dbo.lineage_data_db_table_columns tc ON t.db_table_id = tc.db_table_id " +
+                "LEFT JOIN rawdata.dbo.lineage_data_file_columns fc ON tc.db_column_id = fc.db_column_id " +
+                "WHERE  t.database_name=? AND t.db_table_name=?" +
+                "ORDER BY t.db_table_name, tc.db_column_name";
 
-        when(lineageDataDAO.getAllTables()).thenReturn(tables);
+        // Mock the result set for the query
+        when(jdbcTemplate.query(eq(query), any(LineageDataRowMapper.class), eq(databaseName), eq(tableName)))
+                .thenAnswer(invocation -> {
+                    LineageDataRowMapper rowMapper = invocation.getArgument(1);
+                    // Simulate a ResultSet object being processed by the mapper
+                    rowMapper.mapRow(mockResultSetForTableData(), 1);
+                    return rowMapper.getLineageData();
+                });
 
-        mockMvc.perform(get("/getTables"))
-                .andExpect(MockMvcResultMatchers.status().isOk())
-                .andExpect(MockMvcResultMatchers.jsonPath("$[0]").value("table1"))
-                .andExpect(MockMvcResultMatchers.jsonPath("$[1]").value("table2"));
+        // Act
+        List<Table> lineageData = dao.getLineageDataFromDB(databaseName, tableName);
+
+        // Assert
+        assertNotNull(lineageData);
+        verify(jdbcTemplate, times(1)).query(eq(query), any(LineageDataRowMapper.class), eq(databaseName), eq(tableName));
     }
 
     @Test
-    public void testGetTablesError() throws Exception {
-        when(lineageDataDAO.getAllTables()).thenThrow(new RuntimeException("DB Error"));
+    void saveLineageData_ShouldSaveNewTableAndColumns() {
+        // Arrange
+        Table table = new Table("db1", "table1", Arrays.asList(new TableColumn("column1", "process1", Arrays.asList())));
+        String findTableQuery = "SELECT db_table_id FROM rawdata.dbo.lineage_data_db_tables WHERE database_name = ? AND db_table_name = ?";
+        String insertTableQuery = "INSERT INTO rawdata.dbo.lineage_data_db_tables (database_name, db_table_name, created_by) VALUES (?, ?, ?)";
+        String insertColumnQuery = "INSERT INTO rawdata.dbo.lineage_data_db_table_columns (db_table_id, db_column_name, process_name, created_by) VALUES (?, ?, ?, ?)";
 
-        mockMvc.perform(get("/getTables"))
-                .andExpect(MockMvcResultMatchers.status().isOk())
-                .andExpect(MockMvcResultMatchers.jsonPath("$").isEmpty());
+        when(jdbcTemplate.queryForObject(findTableQuery, String.class, "db1", "table1")).thenReturn(null);
+        when(jdbcTemplate.update(insertTableQuery, "db1", "table1", "janhavi")).thenReturn(1);
+        when(jdbcTemplate.queryForObject(findTableQuery, String.class, "db1", "table1")).thenReturn("1");
+
+        // Act
+        dao.saveLineageData(table);
+
+        // Assert
+        verify(jdbcTemplate, times(2)).queryForObject(findTableQuery, String.class, "db1", "table1");
+        verify(jdbcTemplate, times(1)).update(insertTableQuery, "db1", "table1", "janhavi");
+        verify(jdbcTemplate, times(1)).update(insertColumnQuery, "1", "column1", "process1", "janhavi");
     }
 
     @Test
-    public void testGetColumnMappingsSuccess() throws Exception {
-        List<Table> tables = new ArrayList<>();
-        Table table = new Table("db1", "table1", new ArrayList<>());
-        tables.add(table);
+    void deleteFileColumn_ShouldDeleteColumnsAndFileColumns() throws Exception {
+        // Arrange
+        Table table = new Table("db1", "table1", Arrays.asList(new TableColumn("column1", "process1", Arrays.asList(new FileColumn("fileColumn1", "file1", "source1")))));
+        String findTableQuery = "SELECT db_table_id FROM rawdata.dbo.lineage_data_db_tables WHERE database_name = ? AND db_table_name = ?";
+        String findColumnQuery = "SELECT db_column_id FROM rawdata.dbo.lineage_data_db_table_columns WHERE db_table_id = ? AND db_column_name = ?";
+        String deleteFileColumnQuery = "DELETE FROM rawdata.dbo.lineage_data_file_columns WHERE db_column_id = ? AND file_column_name = ?";
+        String checkFileColumnsQuery = "SELECT COUNT(*) FROM rawdata.dbo.lineage_data_file_columns WHERE db_column_id = ?";
 
-        when(lineageDataDAO.getLineageDataFromDB("db1", "table1")).thenReturn(tables);
+        when(jdbcTemplate.queryForObject(findTableQuery, String.class, "db1", "table1")).thenReturn("1");
+        when(jdbcTemplate.queryForObject(findColumnQuery, String.class, "1", "column1")).thenReturn("10");
+        when(jdbcTemplate.update(deleteFileColumnQuery, "10", "fileColumn1")).thenReturn(1);
+        when(jdbcTemplate.queryForObject(checkFileColumnsQuery, Integer.class, "10")).thenReturn(0);
 
-        mockMvc.perform(get("/getColumnMappings")
-                        .param("db", "db1")
-                        .param("table", "table1"))
-                .andExpect(MockMvcResultMatchers.status().isOk())
-                .andExpect(MockMvcResultMatchers.jsonPath("$[0].databaseName").value("db1"))
-                .andExpect(MockMvcResultMatchers.jsonPath("$[0].tableName").value("table1"));
-    }
+        // Act
+        dao.deleteFileColumn(table);
 
-    @Test
-    public void testGetColumnMappingsInvalidParams() throws Exception {
-        mockMvc.perform(get("/getColumnMappings")
-                        .param("db", "")
-                        .param("table", ""))
-                .andExpect(MockMvcResultMatchers.status().isOk())
-                .andExpect(MockMvcResultMatchers.jsonPath("$").isEmpty());
-    }
-
-    @Test
-    public void testSaveColumnMappingsSuccess() throws Exception {
-        Table table = new Table("db1", "table1", new ArrayList<>());
-
-        mockMvc.perform(post("/saveColumnMappings")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(table)))
-                .andExpect(MockMvcResultMatchers.status().isOk())
-                .andExpect(MockMvcResultMatchers.content().string("Data saved successfully"));
-    }
-
-    @Test
-    public void testSaveColumnMappingsInvalidData() throws Exception {
-        mockMvc.perform(post("/saveColumnMappings")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(null)))
-                .andExpect(MockMvcResultMatchers.status().isBadRequest())
-                .andExpect(MockMvcResultMatchers.content().string("Invalid data"));
-    }
-
-    @Test
-    public void testDeleteFileColumnSuccess() throws Exception {
-        Table table = new Table("db1", "table1", new ArrayList<>());
-
-        mockMvc.perform(delete("/deleteFileColumn")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(table)))
-                .andExpect(MockMvcResultMatchers.status().isOk())
-                .andExpect(MockMvcResultMatchers.content().string("File column deleted successfully"));
-    }
-
-    @Test
-    public void testDeleteFileColumnInvalidData() throws Exception {
-        mockMvc.perform(delete("/deleteFileColumn")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(null)))
-                .andExpect(MockMvcResultMatchers.status().isBadRequest())
-                .andExpect(MockMvcResultMatchers.content().string("Invalid data"));
+        // Assert
+        verify(jdbcTemplate, times(1)).queryForObject(findTableQuery, String.class, "db1", "table1");
+        verify(jdbcTemplate, times(1)).queryForObject(findColumnQuery, String.class, "1", "column1");
+        verify(jdbcTemplate, times(1)).update(deleteFileColumnQuery, "10", "fileColumn1");
     }
 }
