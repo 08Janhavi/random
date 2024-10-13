@@ -1,76 +1,132 @@
-@RestController
-@RequestMapping
-@CrossOrigin(origins="http://localhost:5173")
-public class LineageDataController {
+import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-    @Autowired
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+
+class LineageDataControllerTest {
+
+    @Mock
     private IMLineageDataDAO lineageDataDAO;
 
-    private static final Logger logger = LogManager.getLogger(LineageDataController.class.getName());
+    @InjectMocks
+    private LineageDataController controller;
 
-    @GetMapping("/getDatabases")
-    public List<String> getDatabases(){
-        try{
-            List<String> databases=lineageDataDAO.getAllDatabases();
-            return databases;
-        }
-        catch(Exception e) {
-            logger.error("Error fetching databases",e);
-            return new ArrayList<>();
-        }
+    private MockMvc mockMvc;
+
+    @BeforeEach
+    public void setUp() {
+        MockitoAnnotations.initMocks(this);
+        mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
     }
 
-    @GetMapping("/getTables")
-    public List<String> getTables(){
-        try{
-            List<String> tables=lineageDataDAO.getAllTables();
-            return tables;
-        }
-        catch(Exception e) {
-            logger.error("Error fetching databases",e);
-            return new ArrayList<>();
-        }
+    @Test
+    public void testGetDatabases() throws Exception {
+        List<String> databases = Arrays.asList("db1", "db2");
+        when(lineageDataDAO.getAllDatabases()).thenReturn(databases);
+
+        mockMvc.perform(get("/getDatabases"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0]").value("db1"))
+                .andExpect(jsonPath("$[1]").value("db2"));
+
+        verify(lineageDataDAO, times(1)).getAllDatabases();
     }
 
+    @Test
+    public void testGetDatabasesWithError() throws Exception {
+        when(lineageDataDAO.getAllDatabases()).thenThrow(new RuntimeException("DB error"));
 
-    @GetMapping("/getColumnMappings")
-    public List<Table> getColumnMappings(@RequestParam("db") String db, @RequestParam("table") String table){
-        if(db==null || table==null) return new ArrayList<>();
-        logger.info("data printed");
-        return lineageDataDAO.getLineageDataFromDB(db,table);
+        mockMvc.perform(get("/getDatabases"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isEmpty());
+
+        verify(lineageDataDAO, times(1)).getAllDatabases();
     }
 
+    @Test
+    public void testGetTables() throws Exception {
+        List<String> tables = Arrays.asList("table1", "table2");
+        when(lineageDataDAO.getAllTables()).thenReturn(tables);
 
-    @PostMapping("/saveColumnMappings")
-    public ResponseEntity<String> saveColumnMappings(@RequestBody Table table) {
-        System.out.println("reached inside");
-        logger.info("hey im here");
-        if (table == null) return ResponseEntity.badRequest().body("Invalid data");
+        mockMvc.perform(get("/getTables"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0]").value("table1"))
+                .andExpect(jsonPath("$[1]").value("table2"));
 
-        logger.info("updating lineage data " );
-        lineageDataDAO.saveLineageData(table);
-
-        return ResponseEntity.ok("Data saved successfully");
+        verify(lineageDataDAO, times(1)).getAllTables();
     }
 
+    @Test
+    public void testGetColumnMappings() throws Exception {
+        Table table = new Table("testDb", "testTable", Collections.emptyList());
+        when(lineageDataDAO.getLineageDataFromDB("testDb", "testTable")).thenReturn(Collections.singletonList(table));
 
-    @DeleteMapping("/deleteFileColumn")
-    public ResponseEntity<String> deleteFileColumn(@RequestBody Table table) {
-        logger.info("Received request to delete file column for table: {}", table.tableName());
-        System.out.println(table);
+        mockMvc.perform(get("/getColumnMappings").param("db", "testDb").param("table", "testTable"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].dbName").value("testDb"))
+                .andExpect(jsonPath("$[0].tableName").value("testTable"));
 
-        // Check if table or file columns are null
-        if (table == null || table.tableColumns() == null || table.tableColumns().isEmpty()) {
-            return ResponseEntity.badRequest().body("Invalid data");
-        }
-
-        try {
-            lineageDataDAO.deleteFileColumn(table);
-            return ResponseEntity.ok("File column deleted successfully");
-        } catch (Exception e) {
-            logger.error("Error occurred while deleting file column: ", e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Failed to delete file column");
-        }
+        verify(lineageDataDAO, times(1)).getLineageDataFromDB("testDb", "testTable");
     }
 
+    @Test
+    public void testSaveColumnMappings() throws Exception {
+        Table table = new Table("testDb", "testTable", Collections.emptyList());
+
+        mockMvc.perform(post("/saveColumnMappings")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"dbName\": \"testDb\", \"tableName\": \"testTable\"}")
+        ).andExpect(status().isOk());
+
+        verify(lineageDataDAO, times(1)).saveLineageData(any(Table.class));
+    }
+
+    @Test
+    public void testDeleteFileColumn() throws Exception {
+        Table table = new Table("testDb", "testTable", Collections.emptyList());
+
+        mockMvc.perform(delete("/deleteFileColumn")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"dbName\": \"testDb\", \"tableName\": \"testTable\", \"tableColumns\": []}")
+        ).andExpect(status().isOk());
+
+        verify(lineageDataDAO, times(1)).deleteFileColumn(any(Table.class));
+    }
+
+    @Test
+    public void testDeleteFileColumnWithError() throws Exception {
+        Table table = new Table("testDb", "testTable", Collections.emptyList());
+        doThrow(new Exception("Delete error")).when(lineageDataDAO).deleteFileColumn(any(Table.class));
+
+        mockMvc.perform(delete("/deleteFileColumn")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"dbName\": \"testDb\", \"tableName\": \"testTable\", \"tableColumns\": []}")
+        ).andExpect(status().isInternalServerError());
+
+        verify(lineageDataDAO, times(1)).deleteFileColumn(any(Table.class));
+    }
+
+    @Test
+    public void testSaveColumnMappingsWithInvalidData() throws Exception {
+        mockMvc.perform(post("/saveColumnMappings")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{}"))
+                .andExpect(status().isBadRequest());
+
+        verify(lineageDataDAO, times(0)).saveLineageData(any(Table.class));
+    }
 }
