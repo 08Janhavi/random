@@ -78,4 +78,61 @@ class LineageDataServiceTest {
 
         List<Object[]> args = argsCaptor.getAllValues();
         assertEquals(Arrays.asList("1", "column1", "process1", "CREATED_BY"), Arrays.asList(args.get(0)));
-        assertEquals(Arrays.asList("2", "file_column1 
+        assertEquals(Arrays.asList("2", "file_column1", "file1.csv", "source1", "CREATED_BY"), Arrays.asList(args.get(1))); 
+    }
+
+
+
+
+@Test
+void testSaveLineageData_UpdateColumn() {
+    Table table = new Table("database1", "table1", Arrays.asList(
+            new TableColumn("column1_updated", "process1", Arrays.asList(
+                    new FileColumn("file_column1", "file1.csv", "source1")
+            ))
+    ));
+
+    when(jdbcTemplate.queryForObject(anyString(), eq(String.class), any(), any()))
+            .thenReturn("1")
+            .thenReturn("2");
+
+    lineageDataService.saveLineageData(table);
+
+    verify(jdbcTemplate, times(2)).update(queryCaptor.capture(), argsCaptor.capture());
+
+    List<String> queries = queryCaptor.getAllValues();
+    assertEquals("UPDATE rawdata.dbo.lineage_data_db_table_columns SET db_column_name = ? WHERE db_column_id = ?", queries.get(0));
+    assertEquals("INSERT INTO rawdata.dbo.lineage_data_file_columns (db_column_id, file_column_name, file_name, file_source,created_by) VALUES (?, ?, ?, ?,?)", queries.get(1));
+
+    List<Object[]> args = argsCaptor.getAllValues();
+    assertEquals(Arrays.asList("column1_updated", "2"), Arrays.asList(args.get(0)));
+    assertEquals(Arrays.asList("2", "file_column1", "file1.csv", "source1", "CREATED_BY"), Arrays.asList(args.get(1)));
+}
+
+@Test
+void testSaveLineageData_UpdateFileColumn() {
+    Table table = new Table("database1", "table1", Arrays.asList(
+            new TableColumn("column1", "process1", Arrays.asList(
+                    new FileColumn("file_column1_updated", "file2.csv", "source2")
+            ))
+    ));
+
+    when(jdbcTemplate.queryForObject(anyString(), eq(String.class), any(), any()))
+            .thenReturn("1")
+            .thenReturn("2")
+            .thenReturn("3");
+
+    lineageDataService.saveLineageData(table);
+
+    verify(jdbcTemplate, times(2)).update(queryCaptor.capture(), argsCaptor.capture());
+
+    List<String> queries = queryCaptor.getAllValues();
+    assertEquals("UPDATE rawdata.dbo.lineage_data_file_columns SET file_column_name=?,file_name = ?, file_source = ? WHERE file_column_id = ?", queries.get(1));
+
+    List<Object[]> args = argsCaptor.getAllValues();
+    assertEquals(Arrays.asList("file_column1_updated", "file2.csv", "source2", "3"), Arrays.asList(args.get(1)));
+}
+
+
+
+
