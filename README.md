@@ -1,94 +1,69 @@
-import static org.mockito.Mockito.*;
-import static org.junit.jupiter.api.Assertions.*;
-import org.junit.jupiter.api.Test;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.springframework.jdbc.core.JdbcTemplate;
-import java.util.Arrays;
+public void saveLineageData(Table table) {
+        logger.info("Saving lineage data for table: {}", table.tableName());
 
-public class IMLineageDataDAOTests {
-
-    @Mock
-    private JdbcTemplate jdbcTemplate;
-
-    @InjectMocks
-    private IMLineageDataDAO dao;
-
-    @Test
-    void deleteFileColumn_ShouldThrowException_WhenTableNotFound() {
-        // Arrange
-        Table table = new Table("db1", "table1", Arrays.asList(new TableColumn("column1", "process1", Arrays.asList(new FileColumn("fileColumn1", "fileName1", "fileSource1")))));
+        // Step 1: Get the db_table_id from lineage_data_db_table
         String findTableQuery = "SELECT db_table_id FROM rawdata.dbo.lineage_data_db_tables WHERE database_name = ? AND db_table_name = ?";
+        String dbTableId = jdbcTemplate.queryForObject(findTableQuery, String.class, table.databaseName(), table.tableName());
 
-        when(jdbcTemplate.queryForObject(findTableQuery, String.class, "db1", "table1")).thenReturn(null);
+        if (dbTableId == null) {
+            // Insert the new table if it doesn't exist
+            String insertTableQuery = "INSERT INTO rawdata.dbo.lineage_data_db_tables (database_name, db_table_name,created_by) VALUES (?, ?,?)";
+            jdbcTemplate.update(insertTableQuery, table.databaseName(), table.tableName(),CREATED_BY);
 
-        // Act & Assert
-        Exception exception = assertThrows(Exception.class, () -> {
-            dao.deleteFileColumn(table);
-        });
+            // Fetch the newly inserted db_table_id
+            dbTableId = jdbcTemplate.queryForObject(findTableQuery, String.class, table.databaseName(), table.tableName(),CREATED_BY);
+        }
 
-        assertEquals("Table not found", exception.getMessage());
+        // Step 2: For each table column, insert or update data in lineage_data_db_table_columns
+        for (TableColumn column : table.tableColumns()) {
+            logger.info("Saving column: {}", column.columnName());
+
+            // Check if the column already exists by fetching db_column_id
+            String findColumnQuery = "SELECT db_column_id FROM rawdata.dbo.lineage_data_db_table_columns WHERE db_table_id = ? AND db_column_name = ?";
+            String dbColumnId = null;
+            try{
+                dbColumnId = jdbcTemplate.queryForObject(findColumnQuery, String.class, dbTableId, column.columnName());
+            }
+            catch(Exception e){
+                e.printStackTrace();
+            }
+
+            if (dbColumnId == null) {
+                // Insert a new column if it doesn't exist
+                String insertColumnQuery = "INSERT INTO rawdata.dbo.lineage_data_db_table_columns (db_table_id, db_column_name,process_name,created_by) VALUES (?, ?,?,?)";
+                jdbcTemplate.update(insertColumnQuery, dbTableId, column.columnName(),column.processName(),CREATED_BY);
+
+                // Fetch the newly inserted db_column_id
+                dbColumnId = jdbcTemplate.queryForObject(findColumnQuery, String.class, dbTableId, column.columnName(),column.processName(),CREATED_BY);
+            } else {
+                // Update the existing column
+                String updateColumnQuery = "UPDATE rawdata.dbo.lineage_data_db_table_columns SET db_column_name = ? WHERE db_column_id = ?";
+                jdbcTemplate.update(updateColumnQuery, column.columnName(), dbColumnId);
+            }
+
+            // Step 3: For each file column, insert or update data in lineage_data_file_columns
+            for (FileColumn fileColumn : column.fileColumns()) {
+                logger.info("Saving file column: {}", fileColumn.columnName());
+
+                // Check if the file column already exists
+                String findFileColumnQuery = "SELECT file_column_id FROM rawdata.dbo.lineage_data_file_columns WHERE db_column_id = ? AND file_column_name = ?";
+                String fileColumnId = null;
+                try{
+                    fileColumnId = jdbcTemplate.queryForObject(findFileColumnQuery, String.class, dbColumnId, fileColumn.columnName());
+                }
+                catch(Exception e){
+                    e.printStackTrace();
+                }
+
+                if (fileColumnId == null) {
+                    // Insert new file column
+                    String insertFileColumnQuery = "INSERT INTO rawdata.dbo.lineage_data_file_columns (db_column_id, file_column_name, file_name, file_source,created_by) VALUES (?, ?, ?, ?,?)";
+                    jdbcTemplate.update(insertFileColumnQuery, dbColumnId, fileColumn.columnName(), fileColumn.fileName(), fileColumn.fileSource(),CREATED_BY);
+                } else {
+                    // Update the existing file column
+                    String updateFileColumnQuery = "UPDATE rawdata.dbo.lineage_data_file_columns SET file_column_name=?,file_name = ?, file_source = ? WHERE file_column_id = ?";
+                    jdbcTemplate.update(updateFileColumnQuery,fileColumn.columnName(), fileColumn.fileName(), fileColumn.fileSource(), fileColumnId);
+                }
+            }
+        }
     }
-
-    @Test
-    void deleteFileColumn_ShouldThrowException_WhenColumnNotFound() {
-        // Arrange
-        Table table = new Table("db1", "table1", Arrays.asList(new TableColumn("column1", "process1", Arrays.asList(new FileColumn("fileColumn1", "fileName1", "fileSource1")))));
-        String findTableQuery = "SELECT db_table_id FROM rawdata.dbo.lineage_data_db_tables WHERE database_name = ? AND db_table_name = ?";
-        String findColumnQuery = "SELECT db_column_id FROM rawdata.dbo.lineage_data_db_table_columns WHERE db_table_id = ? AND db_column_name = ?";
-
-        when(jdbcTemplate.queryForObject(findTableQuery, String.class, "db1", "table1")).thenReturn("1");
-        when(jdbcTemplate.queryForObject(findColumnQuery, String.class, "1", "column1")).thenReturn(null);
-
-        // Act & Assert
-        Exception exception = assertThrows(Exception.class, () -> {
-            dao.deleteFileColumn(table);
-        });
-
-        assertEquals("Column not found for column name: column1", exception.getMessage());
-    }
-
-    @Test
-    void deleteFileColumn_ShouldThrowException_WhenFileColumnDeletionFails() {
-        // Arrange
-        Table table = new Table("db1", "table1", Arrays.asList(new TableColumn("column1", "process1", Arrays.asList(new FileColumn("fileColumn1", "fileName1", "fileSource1")))));
-        String findTableQuery = "SELECT db_table_id FROM rawdata.dbo.lineage_data_db_tables WHERE database_name = ? AND db_table_name = ?";
-        String findColumnQuery = "SELECT db_column_id FROM rawdata.dbo.lineage_data_db_table_columns WHERE db_table_id = ? AND db_column_name = ?";
-        String deleteFileColumnQuery = "DELETE FROM rawdata.dbo.lineage_data_file_columns WHERE db_column_id = ? AND file_column_name = ?";
-
-        when(jdbcTemplate.queryForObject(findTableQuery, String.class, "db1", "table1")).thenReturn("1");
-        when(jdbcTemplate.queryForObject(findColumnQuery, String.class, "1", "column1")).thenReturn("1");
-        when(jdbcTemplate.update(deleteFileColumnQuery, "1", "fileColumn1")).thenReturn(0); // Simulate failure to delete
-
-        // Act & Assert
-        Exception exception = assertThrows(Exception.class, () -> {
-            dao.deleteFileColumn(table);
-        });
-
-        assertEquals("Failed to delete file column: fileColumn1", exception.getMessage());
-    }
-
-    @Test
-    void deleteFileColumn_ShouldThrowException_WhenDbColumnDeletionFails() {
-        // Arrange
-        Table table = new Table("db1", "table1", Arrays.asList(new TableColumn("column1", "process1", Arrays.asList(new FileColumn("fileColumn1", "fileName1", "fileSource1")))));
-        String findTableQuery = "SELECT db_table_id FROM rawdata.dbo.lineage_data_db_tables WHERE database_name = ? AND db_table_name = ?";
-        String findColumnQuery = "SELECT db_column_id FROM rawdata.dbo.lineage_data_db_table_columns WHERE db_table_id = ? AND db_column_name = ?";
-        String deleteFileColumnQuery = "DELETE FROM rawdata.dbo.lineage_data_file_columns WHERE db_column_id = ? AND file_column_name = ?";
-        String checkFileColumnsQuery = "SELECT COUNT(*) FROM rawdata.dbo.lineage_data_file_columns WHERE db_column_id = ?";
-        String deleteDbColumnQuery = "DELETE FROM rawdata.dbo.lineage_data_db_table_columns WHERE db_column_id = ?";
-
-        when(jdbcTemplate.queryForObject(findTableQuery, String.class, "db1", "table1")).thenReturn("1");
-        when(jdbcTemplate.queryForObject(findColumnQuery, String.class, "1", "column1")).thenReturn("1");
-        when(jdbcTemplate.update(deleteFileColumnQuery, "1", "fileColumn1")).thenReturn(1);
-        when(jdbcTemplate.queryForObject(checkFileColumnsQuery, Integer.class, "1")).thenReturn(0); // No remaining file columns
-        when(jdbcTemplate.update(deleteDbColumnQuery, "1")).thenReturn(0); // Simulate failure to delete db column
-
-        // Act & Assert
-        Exception exception = assertThrows(Exception.class, () -> {
-            dao.deleteFileColumn(table);
-        });
-
-        assertEquals("Failed to delete db column: column1", exception.getMessage());
-    }
-}
