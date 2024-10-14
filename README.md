@@ -1,63 +1,29 @@
-import static org.mockito.Mockito.*;
-import static org.junit.jupiter.api.Assertions.*;
-
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
-import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.LogManager;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.TestPropertySource;
+import static org.mockito.Mockito.*;
+import org.springframework.boot.SpringApplication;
 
-import java.util.Arrays;
-import java.util.List;
+@ExtendWith(MockitoExtension.class)
+@SpringBootTest(classes = IMDataLineageApplication.class)
+@TestPropertySource("classpath:cat.properties")
+class IMDataLineageApplicationTest {
 
-class GenerateServiceTest {
-
-    @Mock
-    private IMLineageDataDAO imLineageDao;
-
-    @Mock
-    private Logger logger;
-
-    @InjectMocks
-    private GenerateService generateService;
-
-    @BeforeEach
-    void setUp() {
-        MockitoAnnotations.openMocks(this);
-        logger = LogManager.getLogger(GenerateService.class); // Ensures logger setup
+    @Test
+    void contextLoads() {
+        // This test simply ensures the Spring Boot application context loads successfully
     }
 
     @Test
-    void generateLineageData_ShouldCallDaoAndLogInfo() {
-        // Arrange
-        String databaseName = "db1";
-        String tableName = "table1";
-        List<Table> mockLineageData = Arrays.asList(new Table("db1", "table1", Arrays.asList()));
-
-        when(imLineageDao.getLineageDataFromDB(databaseName, tableName)).thenReturn(mockLineageData);
-
-        // Act
-        generateService.generateLineageData(databaseName, tableName);
-
-        // Assert
-        verify(imLineageDao, times(1)).getLineageDataFromDB(databaseName, tableName);
-        verify(logger, times(1)).info("Starting to generate and publish lineage data");
-    }
-
-    @Test
-    void generateLineageData_WhenNoLineageData_ShouldStillLog() {
-        // Arrange
-        String databaseName = "db2";
-        String tableName = "table2";
-        when(imLineageDao.getLineageDataFromDB(databaseName, tableName)).thenReturn(null);
-
-        // Act
-        generateService.generateLineageData(databaseName, tableName);
-
-        // Assert
-        verify(imLineageDao, times(1)).getLineageDataFromDB(databaseName, tableName);
-        verify(logger, times(1)).info("Starting to generate and publish lineage data");
+    void testMainMethod() {
+        // Mock SpringApplication.run to ensure it's called
+        try (var mockedSpringApplication = mockStatic(SpringApplication.class)) {
+            String[] args = {};
+            IMDataLineageApplication.main(args);
+            // Verify that SpringApplication.run is called with the correct class and args
+            mockedSpringApplication.verify(() -> SpringApplication.run(IMDataLineageApplication.class, args));
+        }
     }
 }
