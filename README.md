@@ -1,69 +1,150 @@
-public void saveLineageData(Table table) {
-        logger.info("Saving lineage data for table: {}", table.tableName());
+import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.*;
+import org.junit.jupiter.api.Test;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.springframework.jdbc.core.JdbcTemplate;
+import java.util.Arrays;
 
-        // Step 1: Get the db_table_id from lineage_data_db_table
+public class IMLineageDataDAOTests {
+
+    @Mock
+    private JdbcTemplate jdbcTemplate;
+
+    @InjectMocks
+    private IMLineageDataDAO dao;
+
+    private static final String CREATED_BY = "testUser";
+
+    @Test
+    void saveLineageData_ShouldInsertNewTable_WhenTableNotFound() {
+        // Arrange
+        Table table = new Table("db1", "table1", Arrays.asList(new TableColumn("column1", "process1", Arrays.asList(new FileColumn("fileColumn1", "fileName1", "fileSource1")))));
         String findTableQuery = "SELECT db_table_id FROM rawdata.dbo.lineage_data_db_tables WHERE database_name = ? AND db_table_name = ?";
-        String dbTableId = jdbcTemplate.queryForObject(findTableQuery, String.class, table.databaseName(), table.tableName());
 
-        if (dbTableId == null) {
-            // Insert the new table if it doesn't exist
-            String insertTableQuery = "INSERT INTO rawdata.dbo.lineage_data_db_tables (database_name, db_table_name,created_by) VALUES (?, ?,?)";
-            jdbcTemplate.update(insertTableQuery, table.databaseName(), table.tableName(),CREATED_BY);
+        when(jdbcTemplate.queryForObject(findTableQuery, String.class, "db1", "table1")).thenReturn(null); // Table not found
+        doNothing().when(jdbcTemplate).update(anyString(), anyString(), anyString(), anyString()); // Inserting new table
+        when(jdbcTemplate.queryForObject(findTableQuery, String.class, "db1", "table1")).thenReturn("1"); // Fetch newly inserted table id
 
-            // Fetch the newly inserted db_table_id
-            dbTableId = jdbcTemplate.queryForObject(findTableQuery, String.class, table.databaseName(), table.tableName(),CREATED_BY);
-        }
+        // Act
+        dao.saveLineageData(table);
 
-        // Step 2: For each table column, insert or update data in lineage_data_db_table_columns
-        for (TableColumn column : table.tableColumns()) {
-            logger.info("Saving column: {}", column.columnName());
-
-            // Check if the column already exists by fetching db_column_id
-            String findColumnQuery = "SELECT db_column_id FROM rawdata.dbo.lineage_data_db_table_columns WHERE db_table_id = ? AND db_column_name = ?";
-            String dbColumnId = null;
-            try{
-                dbColumnId = jdbcTemplate.queryForObject(findColumnQuery, String.class, dbTableId, column.columnName());
-            }
-            catch(Exception e){
-                e.printStackTrace();
-            }
-
-            if (dbColumnId == null) {
-                // Insert a new column if it doesn't exist
-                String insertColumnQuery = "INSERT INTO rawdata.dbo.lineage_data_db_table_columns (db_table_id, db_column_name,process_name,created_by) VALUES (?, ?,?,?)";
-                jdbcTemplate.update(insertColumnQuery, dbTableId, column.columnName(),column.processName(),CREATED_BY);
-
-                // Fetch the newly inserted db_column_id
-                dbColumnId = jdbcTemplate.queryForObject(findColumnQuery, String.class, dbTableId, column.columnName(),column.processName(),CREATED_BY);
-            } else {
-                // Update the existing column
-                String updateColumnQuery = "UPDATE rawdata.dbo.lineage_data_db_table_columns SET db_column_name = ? WHERE db_column_id = ?";
-                jdbcTemplate.update(updateColumnQuery, column.columnName(), dbColumnId);
-            }
-
-            // Step 3: For each file column, insert or update data in lineage_data_file_columns
-            for (FileColumn fileColumn : column.fileColumns()) {
-                logger.info("Saving file column: {}", fileColumn.columnName());
-
-                // Check if the file column already exists
-                String findFileColumnQuery = "SELECT file_column_id FROM rawdata.dbo.lineage_data_file_columns WHERE db_column_id = ? AND file_column_name = ?";
-                String fileColumnId = null;
-                try{
-                    fileColumnId = jdbcTemplate.queryForObject(findFileColumnQuery, String.class, dbColumnId, fileColumn.columnName());
-                }
-                catch(Exception e){
-                    e.printStackTrace();
-                }
-
-                if (fileColumnId == null) {
-                    // Insert new file column
-                    String insertFileColumnQuery = "INSERT INTO rawdata.dbo.lineage_data_file_columns (db_column_id, file_column_name, file_name, file_source,created_by) VALUES (?, ?, ?, ?,?)";
-                    jdbcTemplate.update(insertFileColumnQuery, dbColumnId, fileColumn.columnName(), fileColumn.fileName(), fileColumn.fileSource(),CREATED_BY);
-                } else {
-                    // Update the existing file column
-                    String updateFileColumnQuery = "UPDATE rawdata.dbo.lineage_data_file_columns SET file_column_name=?,file_name = ?, file_source = ? WHERE file_column_id = ?";
-                    jdbcTemplate.update(updateFileColumnQuery,fileColumn.columnName(), fileColumn.fileName(), fileColumn.fileSource(), fileColumnId);
-                }
-            }
-        }
+        // Assert
+        verify(jdbcTemplate, times(1)).update(anyString(), eq("db1"), eq("table1"), eq(CREATED_BY));
     }
+
+    @Test
+    void saveLineageData_ShouldUseExistingTable_WhenTableFound() {
+        // Arrange
+        Table table = new Table("db1", "table1", Arrays.asList(new TableColumn("column1", "process1", Arrays.asList(new FileColumn("fileColumn1", "fileName1", "fileSource1")))));
+        String findTableQuery = "SELECT db_table_id FROM rawdata.dbo.lineage_data_db_tables WHERE database_name = ? AND db_table_name = ?";
+
+        when(jdbcTemplate.queryForObject(findTableQuery, String.class, "db1", "table1")).thenReturn("1"); // Table found
+
+        // Act
+        dao.saveLineageData(table);
+
+        // Assert
+        verify(jdbcTemplate, never()).update(anyString(), anyString(), anyString(), anyString()); // No table insertion
+    }
+
+    @Test
+    void saveLineageData_ShouldInsertNewColumn_WhenColumnNotFound() {
+        // Arrange
+        Table table = new Table("db1", "table1", Arrays.asList(new TableColumn("column1", "process1", Arrays.asList(new FileColumn("fileColumn1", "fileName1", "fileSource1")))));
+        String findTableQuery = "SELECT db_table_id FROM rawdata.dbo.lineage_data_db_tables WHERE database_name = ? AND db_table_name = ?";
+        String findColumnQuery = "SELECT db_column_id FROM rawdata.dbo.lineage_data_db_table_columns WHERE db_table_id = ? AND db_column_name = ?";
+
+        when(jdbcTemplate.queryForObject(findTableQuery, String.class, "db1", "table1")).thenReturn("1"); // Table found
+        when(jdbcTemplate.queryForObject(findColumnQuery, String.class, "1", "column1")).thenReturn(null); // Column not found
+
+        // Act
+        dao.saveLineageData(table);
+
+        // Assert
+        verify(jdbcTemplate, times(1)).update(anyString(), eq("1"), eq("column1"), eq("process1"), eq(CREATED_BY)); // Insert column
+    }
+
+    @Test
+    void saveLineageData_ShouldUpdateExistingColumn_WhenColumnFound() {
+        // Arrange
+        Table table = new Table("db1", "table1", Arrays.asList(new TableColumn("column1", "process1", Arrays.asList(new FileColumn("fileColumn1", "fileName1", "fileSource1")))));
+        String findTableQuery = "SELECT db_table_id FROM rawdata.dbo.lineage_data_db_tables WHERE database_name = ? AND db_table_name = ?";
+        String findColumnQuery = "SELECT db_column_id FROM rawdata.dbo.lineage_data_db_table_columns WHERE db_table_id = ? AND db_column_name = ?";
+
+        when(jdbcTemplate.queryForObject(findTableQuery, String.class, "db1", "table1")).thenReturn("1"); // Table found
+        when(jdbcTemplate.queryForObject(findColumnQuery, String.class, "1", "column1")).thenReturn("1"); // Column found
+
+        // Act
+        dao.saveLineageData(table);
+
+        // Assert
+        verify(jdbcTemplate, times(1)).update(anyString(), eq("column1"), eq("1")); // Update column
+    }
+
+    @Test
+    void saveLineageData_ShouldInsertNewFileColumn_WhenFileColumnNotFound() {
+        // Arrange
+        Table table = new Table("db1", "table1", Arrays.asList(new TableColumn("column1", "process1", Arrays.asList(new FileColumn("fileColumn1", "fileName1", "fileSource1")))));
+        String findTableQuery = "SELECT db_table_id FROM rawdata.dbo.lineage_data_db_tables WHERE database_name = ? AND db_table_name = ?";
+        String findColumnQuery = "SELECT db_column_id FROM rawdata.dbo.lineage_data_db_table_columns WHERE db_table_id = ? AND db_column_name = ?";
+        String findFileColumnQuery = "SELECT file_column_id FROM rawdata.dbo.lineage_data_file_columns WHERE db_column_id = ? AND file_column_name = ?";
+
+        when(jdbcTemplate.queryForObject(findTableQuery, String.class, "db1", "table1")).thenReturn("1"); // Table found
+        when(jdbcTemplate.queryForObject(findColumnQuery, String.class, "1", "column1")).thenReturn("1"); // Column found
+        when(jdbcTemplate.queryForObject(findFileColumnQuery, String.class, "1", "fileColumn1")).thenReturn(null); // File column not found
+
+        // Act
+        dao.saveLineageData(table);
+
+        // Assert
+        verify(jdbcTemplate, times(1)).update(anyString(), eq("1"), eq("fileColumn1"), eq("fileName1"), eq("fileSource1"), eq(CREATED_BY)); // Insert file column
+    }
+
+    @Test
+    void saveLineageData_ShouldUpdateExistingFileColumn_WhenFileColumnFound() {
+        // Arrange
+        Table table = new Table("db1", "table1", Arrays.asList(new TableColumn("column1", "process1", Arrays.asList(new FileColumn("fileColumn1", "fileName1", "fileSource1")))));
+        String findTableQuery = "SELECT db_table_id FROM rawdata.dbo.lineage_data_db_tables WHERE database_name = ? AND db_table_name = ?";
+        String findColumnQuery = "SELECT db_column_id FROM rawdata.dbo.lineage_data_db_table_columns WHERE db_table_id = ? AND db_column_name = ?";
+        String findFileColumnQuery = "SELECT file_column_id FROM rawdata.dbo.lineage_data_file_columns WHERE db_column_id = ? AND file_column_name = ?";
+
+        when(jdbcTemplate.queryForObject(findTableQuery, String.class, "db1", "table1")).thenReturn("1"); // Table found
+        when(jdbcTemplate.queryForObject(findColumnQuery, String.class, "1", "column1")).thenReturn("1"); // Column found
+        when(jdbcTemplate.queryForObject(findFileColumnQuery, String.class, "1", "fileColumn1")).thenReturn("1"); // File column found
+
+        // Act
+        dao.saveLineageData(table);
+
+        // Assert
+        verify(jdbcTemplate, times(1)).update(anyString(), eq("fileColumn1"), eq("fileName1"), eq("fileSource1"), eq("1")); // Update file column
+    }
+
+    @Test
+    void saveLineageData_ShouldHandleException_WhenTableQueryFails() {
+        // Arrange
+        Table table = new Table("db1", "table1", Arrays.asList(new TableColumn("column1", "process1", Arrays.asList(new FileColumn("fileColumn1", "fileName1", "fileSource1")))));
+        String findTableQuery = "SELECT db_table_id FROM rawdata.dbo.lineage_data_db_tables WHERE database_name = ? AND db_table_name = ?";
+
+        when(jdbcTemplate.queryForObject(findTableQuery, String.class, "db1", "table1")).thenThrow(new RuntimeException("Database error")); // Simulate exception
+
+        // Act & Assert
+        Exception exception = assertThrows(RuntimeException.class, () -> dao.saveLineageData(table));
+        assertEquals("Database error", exception.getMessage());
+    }
+
+    @Test
+    void saveLineageData_ShouldHandleException_WhenColumnQueryFails() {
+        // Arrange
+        Table table = new Table("db1", "table1", Arrays.asList(new TableColumn("column1", "process1", Arrays.asList(new FileColumn("fileColumn1", "fileName1", "fileSource1")))));
+        String findTableQuery = "SELECT db_table_id FROM rawdata.dbo.lineage_data_db_tables WHERE database_name = ? AND db_table_name = ?";
+        String findColumnQuery = "SELECT db_column_id FROM rawdata.dbo.lineage_data_db_table_columns WHERE db_table_id = ? AND db_column_name = ?";
+
+        when(jdbcTemplate.queryForObject(findTableQuery, String.class, "db1", "table1")).thenReturn("1"); // Table found
+        when(jdbcTemplate.queryForObject(findColumnQuery, String.class, "1", "column1")).thenThrow(new RuntimeException("Database error")); // Simulate exception
+
+        // Act & Assert
+        Exception exception = assertThrows(RuntimeException.class, () -> dao.saveLineageData(table));
+        assertEquals("Database error", exception.getMessage());
+    }
+}
