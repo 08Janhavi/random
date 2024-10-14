@@ -1,52 +1,79 @@
-public void deleteFileColumn(Table table) throws Exception {
-        logger.info("Deleting file column for table: {}", table.tableName());
+import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.*;
+import org.junit.jupiter.api.Test;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.springframework.jdbc.core.JdbcTemplate;
+import java.util.Arrays;
 
-        // Step 1: Get the db_table_id from lineage_data_db_tables
+public class IMLineageDataDAOTests {
+
+    @Mock
+    private JdbcTemplate jdbcTemplate;
+
+    @InjectMocks
+    private IMLineageDataDAO dao;
+
+    @Test
+    void deleteFileColumn_ShouldThrowException_WhenTableNotFound() {
+        // Arrange
+        Table table = new Table("db1", "table1", Arrays.asList(new TableColumn("column1", "process1", Arrays.asList(new FileColumn("fileColumn1", "fileName1", "fileSource1")))));
         String findTableQuery = "SELECT db_table_id FROM rawdata.dbo.lineage_data_db_tables WHERE database_name = ? AND db_table_name = ?";
-        String dbTableId = jdbcTemplate.queryForObject(findTableQuery, String.class, table.databaseName(), table.tableName());
 
-        if (dbTableId == null) {
-            throw new Exception("Table not found");
-        }
+        when(jdbcTemplate.queryForObject(findTableQuery, String.class, "db1", "table1")).thenReturn(null);
 
-        // Step 2: Iterate over each table column to find the associated db_column_id
-        for (TableColumn tableColumn : table.tableColumns()) {
-            logger.info("Processing column: {}", tableColumn.columnName());
+        // Act & Assert
+        Exception exception = assertThrows(Exception.class, () -> {
+            dao.deleteFileColumn(table);
+        });
 
-            // Get db_column_id for the current table column
-            String findColumnQuery = "SELECT db_column_id FROM rawdata.dbo.lineage_data_db_table_columns WHERE db_table_id = ? AND db_column_name = ?";
-            String dbColumnId = jdbcTemplate.queryForObject(findColumnQuery, String.class, dbTableId, tableColumn.columnName());
+        assertEquals("Table not found", exception.getMessage());
+    }
 
-            if (dbColumnId == null) {
-                throw new Exception("Column not found for column name: " + tableColumn.columnName());
-            }
+    @Test
+    void deleteFileColumn_ShouldThrowException_WhenColumnNotFound() {
+        // Arrange
+        Table table = new Table("db1", "table1", Arrays.asList(new TableColumn("column1", "process1", Arrays.asList(new FileColumn("fileColumn1", "fileName1", "fileSource1")))));
+        String findTableQuery = "SELECT db_table_id FROM rawdata.dbo.lineage_data_db_tables WHERE database_name = ? AND db_table_name = ?";
+        String findColumnQuery = "SELECT db_column_id FROM rawdata.dbo.lineage_data_db_table_columns WHERE db_table_id = ? AND db_column_name = ?";
 
-            // Step 3: Iterate over file columns to delete them
-            for (FileColumn fileColumn : tableColumn.fileColumns()) {
-                logger.info("Deleting file column: {}", fileColumn.columnName());
+        when(jdbcTemplate.queryForObject(findTableQuery, String.class, "db1", "table1")).thenReturn("1");
+        when(jdbcTemplate.queryForObject(findColumnQuery, String.class, "1", "column1")).thenReturn(null);
 
-                // Delete the file column from the lineage_data_file_columns table
-                String deleteFileColumnQuery = "DELETE FROM rawdata.dbo.lineage_data_file_columns WHERE db_column_id = ? AND file_column_name = ?";
-                int rowsAffected = jdbcTemplate.update(deleteFileColumnQuery, dbColumnId, fileColumn.columnName());
+        // Act & Assert
+        Exception exception = assertThrows(Exception.class, () -> {
+            dao.deleteFileColumn(table);
+        });
 
-                if (rowsAffected == 0) {
-                    throw new Exception("Failed to delete file column: " + fileColumn.columnName());
-                }
-            }
+        assertEquals("Column not found for column name: column1", exception.getMessage());
+    }
 
-            // Step 4: Check if there are any remaining file columns for the current db_column_id
-            String checkFileColumnsQuery = "SELECT COUNT(*) FROM rawdata.dbo.lineage_data_file_columns WHERE db_column_id = ?";
-            Integer remainingFileColumns = jdbcTemplate.queryForObject(checkFileColumnsQuery, Integer.class, dbColumnId);
+    @Test
+    void deleteFileColumn_ShouldThrowException_WhenFileColumnDeletionFails() {
+        // Arrange
+        Table table = new Table("db1", "table1", Arrays.asList(new TableColumn("column1", "process1", Arrays.asList(new FileColumn("fileColumn1", "fileName1", "fileSource1")))));
+        String findTableQuery = "SELECT db_table_id FROM rawdata.dbo.lineage_data_db_tables WHERE database_name = ? AND db_table_name = ?";
+        String findColumnQuery = "SELECT db_column_id FROM rawdata.dbo.lineage_data_db_table_columns WHERE db_table_id = ? AND db_column_name = ?";
+        String deleteFileColumnQuery = "DELETE FROM rawdata.dbo.lineage_data_file_columns WHERE db_column_id = ? AND file_column_name = ?";
 
-            if (remainingFileColumns != null && remainingFileColumns == 0) {
-                // If no file columns are left, delete the db column
-                String deleteDbColumnQuery = "DELETE FROM rawdata.dbo.lineage_data_db_table_columns WHERE db_column_id = ?";
-                int columnRowsAffected = jdbcTemplate.update(deleteDbColumnQuery, dbColumnId);
+        when(jdbcTemplate.queryForObject(findTableQuery, String.class, "db1", "table1")).thenReturn("1");
+        when(jdbcTemplate.queryForObject(findColumnQuery, String.class, "1", "column1")).thenReturn("1");
+        when(jdbcTemplate.update(deleteFileColumnQuery, "1", "fileColumn1")).thenReturn(0); // Simulate failure to delete
 
-                if (columnRowsAffected == 0) {
-                    throw new Exception("Failed to delete db column: " + tableColumn.columnName());
-                }
-            } else {
-                logger.info("Skipping db column deletion for column: {} as it still has associated file columns.", tableColumn.columnName());
-            }
-        }
+        // Act & Assert
+        Exception exception = assertThrows(Exception.class, () -> {
+            dao.deleteFileColumn(table);
+        });
+
+        assertEquals("Failed to delete file column: fileColumn1", exception.getMessage());
+    }
+
+    @Test
+    void deleteFileColumn_ShouldThrowException_WhenDbColumnDeletionFails() {
+        // Arrange
+        Table table = new Table("db1", "table1", Arrays.asList(new TableColumn("column1", "process1", Arrays.asList(new FileColumn("fileColumn1", "fileName1", "fileSource1")))));
+        String findTableQuery = "SELECT db_table_id FROM rawdata.dbo.lineage_data_db_tables WHERE database_name = ? AND db_table_name = ?";
+        String findColumnQuery = "SELECT db_column_id FROM rawdata.dbo.lineage_data_db_table_columns WHERE db_table_id = ? AND db_column_name = ?";
+        String deleteFileColumnQuery = "DELETE FROM rawdata.dbo.lineage_data_file_columns WHERE db_column_id = ? AND file_column_name = ?";
+        String checkFileColumnsQuery = "SELECT COUNT(*) FROM rawdata.dbo.lineage_data_file_columns WHERE db_column_id = ?";
+        String de
