@@ -1,83 +1,53 @@
-class ModelTableView {
+public class TableMenuManager {
 
-    protected GuiInfo guiInfo;
-    private RequestReferences rr;
-    protected Object searchCriteria = null;
-    private ProcessInfo processInfo;
+    public static int COPY_ID = 0;
+    public static int PASTE_ID = 1;
+    public static int ADD_ID = 2;
+    public static int EDIT_ID = 3;
+    public static int DELETE_ID = 4;
 
-    public ModelTableView() {
-        // Removed UI-related initialization
-    }
+    private CopytoClipboardAction copytoClipboardAction;
+    private EditAction editAction;
+    private AddAction insertAction;
+    private DeleteAction deleteAction;
+    private PasteAction pasteAction;
+    private CopyAction copyAction;
+    private SelectAllAction selectAllAction;
 
-    public void synchronizeUpdates() {
-        // Add backend synchronization logic here if needed
-    }
+    public TableMenuManager() { }
 
-    public RequestReferences getRequestReferences() {
-        return rr;
-    }
+    public void manageActions(ModelTableView modelTableView, GuiInfo guiinfo, ProcessInfo processInfo, RequestReferences rr, Object obj) {
+        int popupType = guiinfo.getPopupMenuType();
 
-    protected String getSearchCriteria() {
-        return searchCriteria != null ? searchCriteria.toString().trim() : null;
-    }
+        boolean showCopyToClipboard = true;
+        boolean showAdd = true;
+        boolean showEdit = true;
+        boolean showDelete = true;
+        boolean showCopy = true;
+        boolean showPaste = false;
 
-    public void setTable(String[] colNames, GuiInfo guiInfo, RequestReferences rr, ProcessInfo processInfo) {
-        this.guiInfo = guiInfo;
-        this.rr = rr;
-        this.processInfo = processInfo;
-        this.searchCriteria = processInfo.getSearchCriteria();
-
-        String activeListName = (String) rr.get(IRequestReferences.ACTIVE_LIST_NAME_KEYWORD);
-        ArrayList<?> arrayList = (ArrayList<?>) rr.get(activeListName);
-
-        // Handle setting up table data backend logic here
-        setTableView(arrayList);
-        synchronizeUpdates();
-    }
-
-    private void setTableCols(String[] colNames) {
-        // Logic to process column names in the backend, if required
-    }
-
-    protected void setTableView(ArrayList<?> list) {
-        if (list == null) return;
-
-        // Process backend logic for setting table data
-    }
-
-    private void hookTableListeners() {
-        // Removed UI-related listener code
-    }
-
-    private class GenericLabelProvider {
-        public String getColumnText(Object obj, int i) {
-            String text = "";
-            try {
-                ObjectEditView objectEditView = new ObjectEditView(obj);
-                text = objectEditView.getValue(i).toString();
-            } catch (Exception e) {
-                // Handle exceptions
-            }
-            return text;
+        if (popupType == GuiInfo.ALL_NO_INSERT_MENU) {
+            showAdd = false;
+        } else if (popupType == GuiInfo.UPDATE_ONLY_MENU) {
+            showAdd = false;
+            showDelete = false;
+            showCopyToClipboard = false;
+        } else if (popupType == GuiInfo.NONE_MENU) {
+            return;
         }
 
-        public Object createNew() {
-            return null; // Default implementation
-        }
-    }
+        copytoClipboardAction = new CopytoClipboardAction();
+        editAction = new EditAction(processInfo, rr);
+        insertAction = new AddAction(processInfo, rr, obj);
+        deleteAction = new DeleteAction(processInfo, rr);
+        pasteAction = new PasteAction(processInfo, rr);
+        copyAction = new CopyAction(processInfo);
 
-    private class GenericSorter {
-        private int col;
-        private boolean reverse;
-
-        public GenericSorter(int col, boolean reverse) {
-            this.col = col;
-            this.reverse = reverse;
-        }
-
-        public int compare(Object o1, Object o2) {
-            int seq = ObjectEditView.compare(o1, o2, col);
-            return reverse ? -seq : seq;
-        }
+        copytoClipboardAction.setEnabled(showCopyToClipboard);
+        deleteAction.setEnabled(showDelete);
+        insertAction.setEnabled(showAdd);
+        editAction.setEnabled(showEdit);
+        pasteAction.setEnabled(showPaste);
+        copyAction.setEnabled(showCopy);
     }
 }
