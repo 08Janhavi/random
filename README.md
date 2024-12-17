@@ -1,84 +1,76 @@
-import java.util.Iterator;
-import java.util.logging.Logger;
+public class MyTableView {
 
-public class NavigationService {
+    private DataNode comp;
+    private List filterPkVal;
+    private QueryResult qr;
 
-    private static final Logger log = Logger.getLogger(NavigationService.class.getName());
-
-    private String connectionString;
-
-    public NavigationService(String connectionString) {
-        this.connectionString = connectionString;
-        log.info("Constructing navigation service with connectionString=" + connectionString);
+    public MyTableView(DataNode comp, List filterPkVal) {
+        this.comp = comp;
+        this.filterPkVal = filterPkVal;
     }
 
-    public void processData(RequestReferences requestReferences, ProcessInfo processInfo) {
-        log.info("Processing data: requestReferences=" + requestReferences + ", processInfo=" + processInfo);
-
-        String activeListName = (String) requestReferences.get(IRequestReferences.ACTIVE_LIST_NAME_KEYWORD);
-        if (activeListName == null) {
-            log.warning("No active list name found. Default processing...");
-            return;
-        }
-
-        Object data = requestReferences.get(activeListName);
-        if (data == null) {
-            log.warning("No data found for the active list name.");
-            return;
-        }
-
-        int type = processInfo.getType();
-        String title = ComponentMapping.getTitle(type);
-
-        log.info("Title=" + title + ", Type=" + type);
+    public void query() {
         try {
-            GuiInfo guiInfo = new GuiInfo(type);
-            guiInfo.setPopupMenuType(ComponentMapping.getPopupType(type).intValue());
-
-            String listPanelName = ComponentMapping.getListPanelName(type);
-            ModelTableView tableView = (ModelTableView) Class.forName(listPanelName).getDeclaredConstructor().newInstance();
-
-            String[] colNames = ComponentMapping.getListHeader(type);
-            tableView.setTable(colNames, guiInfo, requestReferences, processInfo);
-            tableView.display();
-
-        } catch (Exception e) {
-            log.severe("Error processing data: " + e.getMessage());
-            e.printStackTrace();
+            qr = Dao.execQuery(comp.getGridQuery(), filterPkVal);
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            throw new RuntimeException("Error executing query: " + ex.getMessage(), ex);
         }
     }
 
-    public void handleSelection(Model model) {
-        log.info("Handling tree node selection: " + model.getAction());
-        RequestReferences requestReferences = new RequestReferences();
-        ProcessInfo processInfo = new ProcessInfo();
-        ProcessManager manager = new ProcessManager(processInfo, requestReferences);
+    private void setTableCols() {
+        int weight = 100 / comp.getGridColumns().size();
 
-        try {
-            if (model instanceof MyCategorization) {
-                MyCategorization myCat = (MyCategorization) model;
-                if (myCat.getComp() instanceof StaticNode) {
-                    log.info("Processing StaticNode");
-                    MyStaticTableView staticTableView = new MyStaticTableView((StaticNode) myCat.getComp());
-                    staticTableView.query();
+        for (int i = 0; i < comp.getGridColumns().size(); i++) {
+            IComp cc = (IComp) comp.getGridColumns().get(i);
 
-                } else if (myCat.getComp() instanceof DataNode) {
-                    log.info("Processing DataNode");
-                    MyTableView dataTableView = new MyTableView((DataNode) myCat.getComp(), myCat.getPkVal());
-                    dataTableView.query();
-                }
-            } else {
-                log.info("Refreshing table for non-categorization model.");
-                manager.processSelection(model);
-                processData(requestReferences, processInfo);
+            if (cc instanceof Primitive) {
+                // Set column metadata if needed
+            } else if (cc instanceof DataCombo) {
+                // Set column metadata if needed
             }
-        } catch (Exception e) {
-            log.severe("Error handling selection: " + e.getMessage());
-            e.printStackTrace();
         }
     }
 
-    public String getConnectionString() {
-        return connectionString;
+    private class GenericLabelProvider {
+
+        public String getColumnText(Object obj, int i) {
+            List lst = (List) obj;
+            String text = "" + lst.get(i);
+
+            if (text.equalsIgnoreCase("false") || text.equalsIgnoreCase("true")) {
+                text = "";
+            }
+
+            return text;
+        }
+    }
+
+    private class GenericSorter extends ViewerSorter {
+        private int col;
+        private boolean reverse;
+
+        public GenericSorter(int col, boolean reverse) {
+            super();
+            this.col = col;
+            this.reverse = reverse;
+        }
+
+        public int compare(Object o1, Object o2) {
+            int seq = 0;
+
+            Object col1 = ((List) o1).get(col);
+            Object col2 = ((List) o2).get(col);
+
+            if (col1 == null) {
+                seq = -1;
+            } else if (col2 == null) {
+                seq = 1;
+            } else if (col1 instanceof Comparable) {
+                seq = ((Comparable) col1).compareTo(col2);
+            }
+
+            return reverse ? -seq : seq;
+        }
     }
 }
