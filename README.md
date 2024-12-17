@@ -1,53 +1,39 @@
-public class TableMenuManager {
+import java.awt.Toolkit;
+import java.awt.datatransfer.StringSelection;
+import java.util.Iterator;
+import java.util.List;
 
-    public static int COPY_ID = 0;
-    public static int PASTE_ID = 1;
-    public static int ADD_ID = 2;
-    public static int EDIT_ID = 3;
-    public static int DELETE_ID = 4;
+public class CopytoClipboardAction {
 
-    private CopytoClipboardAction copytoClipboardAction;
-    private EditAction editAction;
-    private AddAction insertAction;
-    private DeleteAction deleteAction;
-    private PasteAction pasteAction;
-    private CopyAction copyAction;
-    private SelectAllAction selectAllAction;
+    private List<DataObject> dataObjects;
 
-    public TableMenuManager() { }
+    public CopytoClipboardAction(List<DataObject> dataObjects) {
+        this.dataObjects = dataObjects;
+    }
 
-    public void manageActions(ModelTableView modelTableView, GuiInfo guiinfo, ProcessInfo processInfo, RequestReferences rr, Object obj) {
-        int popupType = guiinfo.getPopupMenuType();
+    public void run() {
+        StringBuffer copy = new StringBuffer();
 
-        boolean showCopyToClipboard = true;
-        boolean showAdd = true;
-        boolean showEdit = true;
-        boolean showDelete = true;
-        boolean showCopy = true;
-        boolean showPaste = false;
+        try {
+            for (DataObject obj : dataObjects) {
+                if (obj != null) {
+                    ObjectEditView v = new ObjectEditView(obj);
+                    StringBuffer buff = new StringBuffer();
+                    for (int findex = 0; findex < v.size(); findex++) {
+                        if (findex > 0) buff.append('\t');
+                        buff.append(v.getValue(findex));
+                    }
+                    buff.append('\n');
+                    copy.append(buff.toString());
+                }
+            }
 
-        if (popupType == GuiInfo.ALL_NO_INSERT_MENU) {
-            showAdd = false;
-        } else if (popupType == GuiInfo.UPDATE_ONLY_MENU) {
-            showAdd = false;
-            showDelete = false;
-            showCopyToClipboard = false;
-        } else if (popupType == GuiInfo.NONE_MENU) {
-            return;
+            StringSelection stringSelection = new StringSelection(copy.toString());
+            Toolkit.getDefaultToolkit().getSystemClipboard().setContents(stringSelection, null);
+
+        } catch (Exception e) {
+            // Handle exception as per your backend requirements
+            e.printStackTrace();
         }
-
-        copytoClipboardAction = new CopytoClipboardAction();
-        editAction = new EditAction(processInfo, rr);
-        insertAction = new AddAction(processInfo, rr, obj);
-        deleteAction = new DeleteAction(processInfo, rr);
-        pasteAction = new PasteAction(processInfo, rr);
-        copyAction = new CopyAction(processInfo);
-
-        copytoClipboardAction.setEnabled(showCopyToClipboard);
-        deleteAction.setEnabled(showDelete);
-        insertAction.setEnabled(showAdd);
-        editAction.setEnabled(showEdit);
-        pasteAction.setEnabled(showPaste);
-        copyAction.setEnabled(showCopy);
     }
 }
