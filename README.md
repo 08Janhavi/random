@@ -1,64 +1,83 @@
-public class NavigationTreeView {
+class ModelTableView {
 
-    private static final Logger log = Logger.getLogger(NavigationTreeView.class);
+    protected GuiInfo guiInfo;
+    private RequestReferences rr;
+    protected Object searchCriteria = null;
+    private ProcessInfo processInfo;
 
-    public NavigationTreeView() {
-        log.info("NavigationTreeView initialized");
+    public ModelTableView() {
+        // Removed UI-related initialization
     }
 
-    public void refresh() {
-        try {
-            log.info("Refreshing the tree");
-            initialize(); // Backend logic to initialize
-        } catch (Exception e) {
-            log.error("Error refreshing tree", e);
+    public void synchronizeUpdates() {
+        // Add backend synchronization logic here if needed
+    }
+
+    public RequestReferences getRequestReferences() {
+        return rr;
+    }
+
+    protected String getSearchCriteria() {
+        return searchCriteria != null ? searchCriteria.toString().trim() : null;
+    }
+
+    public void setTable(String[] colNames, GuiInfo guiInfo, RequestReferences rr, ProcessInfo processInfo) {
+        this.guiInfo = guiInfo;
+        this.rr = rr;
+        this.processInfo = processInfo;
+        this.searchCriteria = processInfo.getSearchCriteria();
+
+        String activeListName = (String) rr.get(IRequestReferences.ACTIVE_LIST_NAME_KEYWORD);
+        ArrayList<?> arrayList = (ArrayList<?>) rr.get(activeListName);
+
+        // Handle setting up table data backend logic here
+        setTableView(arrayList);
+        synchronizeUpdates();
+    }
+
+    private void setTableCols(String[] colNames) {
+        // Logic to process column names in the backend, if required
+    }
+
+    protected void setTableView(ArrayList<?> list) {
+        if (list == null) return;
+
+        // Process backend logic for setting table data
+    }
+
+    private void hookTableListeners() {
+        // Removed UI-related listener code
+    }
+
+    private class GenericLabelProvider {
+        public String getColumnText(Object obj, int i) {
+            String text = "";
+            try {
+                ObjectEditView objectEditView = new ObjectEditView(obj);
+                text = objectEditView.getValue(i).toString();
+            } catch (Exception e) {
+                // Handle exceptions
+            }
+            return text;
+        }
+
+        public Object createNew() {
+            return null; // Default implementation
         }
     }
 
-    private Categorization initialize() throws EsmException {
-        log.info("Constructing treeComponent");
-        TreeComponent treeComponent = new TreeComponent();
-        return treeComponent.getTree();
-    }
-}
+    private class GenericSorter {
+        private int col;
+        private boolean reverse;
 
-class NavigationViewContentProvider {
-
-    public Object[] getElements(Object parent) {
-        return getChildren(parent);
-    }
-
-    public Object getParent(Object child) {
-        if (child instanceof Model) {
-            return ((Model) child).getParent();
+        public GenericSorter(int col, boolean reverse) {
+            this.col = col;
+            this.reverse = reverse;
         }
-        return null;
-    }
 
-    public Object[] getChildren(Object parent) {
-        if (parent instanceof Categorization) {
-            return ((Categorization) parent).getChildren();
-        } else if (parent instanceof Domain) {
-            return ((Domain) parent).getChildren();
+        public int compare(Object o1, Object o2) {
+            int seq = ObjectEditView.compare(o1, o2, col);
+            return reverse ? -seq : seq;
         }
-        return new Object[0];
-    }
-
-    public boolean hasChildren(Object parent) {
-        if (parent instanceof Categorization) {
-            return ((Categorization) parent).hasChildren();
-        }
-        return false;
-    }
-}
-
-class NavigationViewLabelProvider {
-
-    public String getText(Object obj) {
-        return obj.toString();
-    }
-
-    public Image getImage(Object obj) {
-        return null; // Removed UI-specific logic
     }
 }
