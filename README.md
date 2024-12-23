@@ -1,12 +1,8 @@
-useEffect(() => {
-    // Call the backend navigation view controller service on component mount
-    const fetchNavigationData = async () => {
-      try {
-        const response = await axios.get('/api/navigationView');  // Adjust URL as needed
-        console.log(response.data);  // Handle the response as needed
-        // You can set any state with the fetched data if required, for example:
-        // setNavigationData(response.data);
-      } catch (error) {
-        console.error("Error fetching navigation data", error);
-      }
-    };
+@PostMapping("/navigationView")
+    public ResponseEntity<String> handleNavigationView() {
+        // Simulate some backend processing
+        System.out.println("Navigation view service called");
+
+        // You can add any logic here, like updating a database or logging
+        return new ResponseEntity<>("Service called successfully", HttpStatus.OK);
+    }
